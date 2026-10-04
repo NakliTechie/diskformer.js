@@ -1,13 +1,44 @@
 {
   "name": "diskformer",
-  "version": "0.0.1",
-  "description": "A disk tier for in-browser inference: keep model weights in OPFS and page into WebGPU only what each step needs. Pre-release name placeholder; v0.1 is being extracted from LocalMind.",
+  "version": "0.1.0",
+  "description": "A disk tier for in-browser inference: keep model weights in OPFS and page into WebGPU only what each step needs.",
   "type": "module",
   "license": "MIT",
   "author": "Chirag Patnaik",
   "homepage": "https://github.com/NakliTechie/diskformer.js#readme",
-  "repository": { "type": "git", "url": "git+https://github.com/NakliTechie/diskformer.js.git" },
-  "bugs": { "url": "https://github.com/NakliTechie/diskformer.js/issues" },
-  "keywords": ["webgpu", "opfs", "llm", "inference", "offload", "moe", "browser", "transformers"],
-  "files": ["README.md", "LICENSE"]
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NakliTechie/diskformer.js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/NakliTechie/diskformer.js/issues"
+  },
+  "keywords": [
+    "webgpu",
+    "opfs",
+    "llm",
+    "inference",
+    "offload",
+    "moe",
+    "browser",
+    "transformers"
+  ],
+  "files": [
+    "index.js",
+    "src/",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "scripts": {
+    "test": "node test/run.mjs",
+    "demo": "node examples/run-demo.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
 }

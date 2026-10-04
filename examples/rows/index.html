@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>diskformer rows demo</title>
+<style>
+  :root { --bg: #fbfaf7; --fg: #1d1d1b; --muted: #6b6a66; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #161615; --fg: #ecebe6; --muted: #a3a29c; } }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 24px 16px; max-width: 760px; }
+  p { color: var(--muted); } pre { white-space: pre-wrap; }
+</style>
+<h1>diskformer · rows from disk</h1>
+<p>Writes a 64 MB table (65,536 rows × 1 KB) to this browser's private storage (OPFS) once, keeps 2,048 rows on the GPU,
+looks up 8,000 ids, then reads the GPU back and checks every resident row byte for byte. Needs Chrome or Edge with WebGPU.</p>
+<pre id="out">running…</pre>
+<script type="module">
+const out = document.getElementById('out');
+const w = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+w.onerror = (e) => { out.textContent = 'worker error: ' + e.message; window.result = { error: e.message }; };
+w.onmessage = (e) => {
+  const d = e.data;
+  if (d.log) { out.textContent += '\n' + d.log; return; }
+  window.result = d;
+  out.textContent = JSON.stringify(d, null, 2);
+};
+</script>

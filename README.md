@@ -3,20 +3,35 @@
 **Keep model weights on disk in the browser, and page into WebGPU only what each step needs.**
 A disk tier for in-browser inference — not another engine.
 
-Plain ES modules. Chromium with WebGPU. No server, no build step, no telemetry.
+Plain ES modules, no dependencies, no build step. Chromium with WebGPU. Weights stay in the user's own browser storage.
 
-> **Status: pre-release.** The code runs today inside [LocalMind](https://github.com/NakliTechie/LocalMind).
-> v0.1 extracts it here with no behaviour change. `0.0.x` on npm is a name placeholder.
+[![npm](https://img.shields.io/npm/v/diskformer?style=flat-square&color=555)](https://www.npmjs.com/package/diskformer)
+[![license](https://img.shields.io/badge/license-MIT-555?style=flat-square)](LICENSE)
+[![dependencies](https://img.shields.io/badge/dependencies-none-555?style=flat-square)](package.json)
 
 ## Install
 
 | How | Command |
 |---|---|
-| npm | `npm install diskformer` *(from v0.1)* |
-| CDN | `import { … } from 'https://cdn.jsdelivr.net/npm/diskformer/+esm'` *(from v0.1)* |
+| npm | `npm install diskformer` |
+| CDN | `import { RowFile, RowCache } from 'https://cdn.jsdelivr.net/npm/diskformer@0.1/index.js'` |
+| Copy | the `src/` files and `index.js`; nothing else is needed |
 
-TODO(v0.1): the first call — copy a weights file into OPFS once, open a GPU row cache or expert pool on your
-`GPUDevice`, and read what a step needs.
+The first call keeps a table on disk and a few thousand of its rows on the GPU. Row files use OPFS sync access
+handles, so this runs in a dedicated worker:
+
+```js
+import { RowFile, RowCache, fingerprint } from 'diskformer';
+
+const file = await RowFile.open({ key: 'my-model', rowBytes, rows });     // OPFS: diskformer/my-model/rows.bin
+const fp = fingerprint([weights]);                                          // changes when the weights change
+if (!file.matches(fp)) await file.write(fp, (row0, n, dst) => dst.set(weights.subarray(row0 * rowBytes, (row0 + n) * rowBytes)));
+await file.openRead();
+const cache = new RowCache({ file, slots: 4096, planes: [{ offset: 0, bytes: rowBytes, buffer: gpuRows }], queue: device.queue });
+const slots = cache.lookup(tokenIds);    // rows resident on the GPU; your kernel reads gpuRows at slot × rowBytes
+```
+
+Nothing to configure, no server. To try it without a model: `node examples/run-demo.mjs`.
 
 ## Why
 
@@ -24,21 +39,45 @@ Your model does not fit on the GPU, or it fits only by crowding out everything e
 weight onto the GPU at load time, including the ones a step never touches: Gemma 4's per-layer embedding table is
 read one row per token, and a mixture-of-experts model uses under a tenth of its weights per token.
 
-diskformer.js keeps those weights in OPFS — the browser's private file system, read through sync access handles in
-workers — and pages into a GPU cache only what each step needs. What it does today, inside LocalMind:
+diskformer keeps those weights in OPFS, the browser's private file system, read through sync access handles in
+workers. It pages into a GPU cache only what each step needs. It is the store and the residency layer; your engine
+keeps its own kernels and decides what a step needs. Chromium only (OPFS sync handles and WebGPU).
 
-- **Gemma 4 E2B:** the 1.2 GB per-layer embedding table on disk; Chrome's GPU process drops from 4.27 GB to 2.07 GB on
-  the live site, with identical output.
-- **Qwen3.6-35B-A3B (36.9 GB), experimental:** experts paged from OPFS on a 24 GB Mac; greedy output matches
-  llama.cpp's Metal backend 8/8 on 4- and 16-layer cuts of the same GGUF.
+## A table on disk
 
-## Context
+`RowFile` holds fixed-size rows in one OPFS file with a manifest, written once and validated by a fingerprint.
+`RowCache` keeps `slots` rows on the GPU, split into planes when a row's parts live in different buffers, with an
+O(1) LRU and an optional GPU id→slot map that kernels can read. `warm(row0, count)` preloads the rows you expect.
 
-Extracted from LocalMind's SSD-streaming work (2026-10-02 to 2026-10-04): `opfs-reader.js` (OPFS reader pool and
-writer), `moe-expert-stream.js` (GPU slot pool with eviction, pins, prefetch and mapped staging-ring uploads) and
-`ple-opfs.js` (row file and GPU row cache). v0.1 scope is those two layers — store and residency — moved here with no
-behaviour change and verified by LocalMind's existing gates.
+## Experts on disk
+
+`ingestGguf({ url, key, plan })` streams a GGUF over HTTP ranges into OPFS in your engine's layout: `plan.layout`
+says where each tensor goes, `plan.units` lists the byte ranges to copy or split (Q8_0 and Q4_0 blocks become a
+value plane and an f16-scale plane, bit-exact). `ExpertStreamer` (also exported as `RecordPool`) keeps a fixed GPU
+slot pool of expert records: `ensure(layer, ids)` returns pinned slots, `prefetch(layer, guesses)` never blocks, and
+uploads go through a mapped staging ring.
+
+## Measure the disk
+
+`measure({ path, recordBytes })` reports sequential MB/s and random whole-record reads, one at a time and in bursts
+of 8, through the reader pool. OPFS speed varies a lot between machines; measure where your users run.
+
+## Commands
+
+```bash
+npm test                     # Node unit tests: record pool, row cache, GGUF parse and block splits, ingest helpers
+node examples/run-demo.mjs   # headless Chrome: a 64 MB table on disk, 2,048 rows on the GPU, every byte checked
+```
+
+## Verify it yourself
+
+`npm test` runs the unit tests with fake GPU queues. `node examples/run-demo.mjs` writes a table to OPFS, looks up
+8,000 ids, reads the GPU back and fails on any byte or map entry that differs from the source.
+
+The code runs in [LocalMind](https://github.com/NakliTechie/LocalMind) on its live site. `opfs-reader.js` and
+`expert-stream.js` are byte-identical to LocalMind's copies. `rows.js`, `gguf.js` and `ingest.js` are extracted from
+it. Ingesting an 8 GB Gemma 4 GGUF with this `ingestGguf` produced files byte-identical to LocalMind's (2026-10-05).
 
 ## License
 
-MIT · LocalMind: [github.com/NakliTechie/LocalMind](https://github.com/NakliTechie/LocalMind)
+MIT. Pointers: [LocalMind](https://github.com/NakliTechie/LocalMind) (where it runs) · `CHANGELOG.md`.
