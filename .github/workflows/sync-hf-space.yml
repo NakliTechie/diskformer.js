@@ -1,8 +1,8 @@
-name: Sync the Hugging Face Space
+name: Publish the demo (diskformer.naklitechie.com + the HF Space)
 
-# Rebuilds the Space tree (scripts/build-space.mjs) and mirrors it to naklitechie/diskformer-chat on every push to
-# main that touches what the Space serves. Needs the HF_TOKEN repo secret (write access to that Space); without it
-# the job says so and exits 0.
+# Rebuilds the demo tree (scripts/build-space.mjs) on every push to main that touches what it serves, then deploys it
+# to diskformer.naklitechie.com (wrangler.jsonc; needs CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID) and mirrors it to
+# the Space naklitechie/diskformer-chat (needs HF_TOKEN). A job whose secret is missing says so and exits 0.
 
 on:
   push:
@@ -13,6 +13,7 @@ on:
       - examples/chat/**
       - scripts/build-space.mjs
       - LICENSE
+      - wrangler.jsonc
       - .github/workflows/sync-hf-space.yml
   workflow_dispatch:
 
@@ -29,7 +30,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           if [ -z "$HF_TOKEN" ]; then echo "HF_TOKEN is not set; skipping the Space sync"; exit 0; fi
-          node scripts/build-space.mjs space
+          node scripts/build-space.mjs space --space
           pip install --quiet huggingface_hub
           python3 - <<'PY'
           from huggingface_hub import HfApi
@@ -37,3 +38,19 @@ jobs:
           HfApi().upload_folder(repo_id='naklitechie/diskformer-chat', repo_type='space', folder_path='space',
               commit_message='Sync from GitHub', delete_patterns=['*.html', '*.md', 'LICENSE', 'src/**', 'engines/**', 'refs/**'])
           PY
+
+  site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Build and deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo "CLOUDFLARE_API_TOKEN is not set; skipping the site deploy"; exit 0; fi
+          node scripts/build-space.mjs site
+          npx --yes wrangler@4 deploy

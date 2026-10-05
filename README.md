@@ -20,7 +20,7 @@ Plain ES modules, no dependencies, no build step. Chromium with WebGPU. Weights 
 
 ## Try it: a 14.4 GB model in 2.5 GB of GPU memory
 
-Open the [Hugging Face Space](https://naklitechie-diskformer-chat.static.hf.space/), or serve `examples/chat` yourself.
+Open [diskformer.naklitechie.com](https://diskformer.naklitechie.com/) (also on a [Hugging Face Space](https://huggingface.co/spaces/naklitechie/diskformer-chat)), or serve `examples/chat` yourself.
 Pick a model and a GPU memory budget. The page downloads the model once into OPFS, resumably, then chats.
 
 ```bash

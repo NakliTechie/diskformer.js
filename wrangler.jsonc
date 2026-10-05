@@ -1,0 +1,8 @@
+// diskformer.naklitechie.com: examples/chat as static assets on Cloudflare (no Worker code).
+//   node scripts/build-space.mjs site && npx wrangler deploy
+{
+  "name": "diskformer",
+  "compatibility_date": "2026-09-01",
+  "assets": { "directory": "./site" },
+  "routes": [{ "pattern": "diskformer.naklitechie.com", "custom_domain": true }]
+}
