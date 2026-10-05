@@ -31,7 +31,8 @@ const cache = new RowCache({ file, slots: 4096, planes: [{ offset: 0, bytes: row
 const slots = cache.lookup(tokenIds);    // rows resident on the GPU; your kernel reads gpuRows at slot × rowBytes
 ```
 
-Nothing to configure, no server. To try it without a model: `node examples/run-demo.mjs`.
+Nothing to configure, no server. `examples/embedding` is the whole loop in one page, with the WGSL kernel that reads
+the slots: a 128 MB table on disk, 1 MB of it on the GPU.
 
 ## Why
 
@@ -65,8 +66,9 @@ of 8, through the reader pool. OPFS speed varies a lot between machines; measure
 ## Commands
 
 ```bash
-npm test                     # Node unit tests: record pool, row cache, GGUF parse and block splits, ingest helpers
-node examples/run-demo.mjs   # headless Chrome: a 64 MB table on disk, 2,048 rows on the GPU, every byte checked
+npm test                               # Node unit tests: record pool, row cache, GGUF parse and block splits, ingest helpers
+node examples/run-demo.mjs rows        # headless Chrome: a 64 MB table on disk, 2,048 rows on the GPU, every byte checked
+node examples/run-demo.mjs embedding   # the full loop: lookup → slots → a WGSL gather kernel, every output value checked
 ```
 
 ## Verify it yourself

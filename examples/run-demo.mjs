@@ -1,5 +1,5 @@
-// Runs examples/rows in headless Chrome and prints window.result. Serves the repo itself on a free port.
-//   node examples/run-demo.mjs [--profile dir]
+// Runs an example in headless Chrome and prints window.result. Serves the repo itself on a free port.
+//   node examples/run-demo.mjs [rows|embedding] [--profile dir]
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { readFile, mkdtemp } from 'node:fs/promises';
@@ -26,7 +26,8 @@ for (let k = 0; k < 100 && !ws; k++) { try { const t = (await (await fetch(`http
 await new Promise((r) => { ws.onopen = r; });
 let id = 0; const pend = new Map(); ws.onmessage = (e) => { const m = JSON.parse(e.data); if (pend.has(m.id)) { pend.get(m.id)(m); pend.delete(m.id); } };
 const send = (method, params = {}) => new Promise((r) => { const n = ++id; pend.set(n, r); ws.send(JSON.stringify({ id: n, method, params })); });
-await send('Page.navigate', { url: `http://127.0.0.1:${port}/examples/rows/index.html` });
+const example = ['rows', 'embedding'].includes(process.argv[2]) ? process.argv[2] : 'rows';
+await send('Page.navigate', { url: `http://127.0.0.1:${port}/examples/${example}/index.html` });
 for (let k = 0; k < 600; k++) {
   const r = await send('Runtime.evaluate', { expression: 'window.result || null', returnByValue: true });
   const v = r.result && r.result.result && r.result.result.value;

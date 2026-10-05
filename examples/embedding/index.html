@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>diskformer embedding demo</title>
+<style>
+  :root { --bg: #fbfaf7; --fg: #1d1d1b; --muted: #6b6a66; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #161615; --fg: #ecebe6; --muted: #a3a29c; } }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 24px 16px; max-width: 760px; }
+  p { color: var(--muted); } pre { white-space: pre-wrap; }
+</style>
+<h1>diskformer · an embedding table on disk</h1>
+<p>A 128 MB embedding table (131,072 tokens × 256 floats) lives in this browser's private storage (OPFS). The GPU holds
+only 1,024 rows (1 MB). For 200 steps of 32 token ids, the page asks the cache for the rows, runs a WGSL kernel that
+gathers them through the returned slots, reads the result back, and checks every value against the source table.
+Needs Chrome or Edge with WebGPU.</p>
+<pre id="out">running…</pre>
+<script type="module">
+const out = document.getElementById('out');
+const w = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
+w.onerror = (e) => { out.textContent = 'worker error: ' + e.message; window.result = { ok: false, error: e.message }; };
+w.onmessage = (e) => {
+  if (e.data.log) { out.textContent += '\n' + e.data.log; return; }
+  window.result = e.data;
+  out.textContent = JSON.stringify(e.data, null, 2);
+};
+</script>
