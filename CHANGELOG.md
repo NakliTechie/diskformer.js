@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (draft, 2026-10-05; not published)
+## 0.1.0 (2026-10-05)
 - Store: `OpfsReaderPool`, `OpfsWriter` and OPFS helpers (byte-identical to LocalMind's `opfs-reader.js`); `ingestGguf`
   with `root` and `format` options (extracted from LocalMind's `qwen3_moe_ssd.js`; output byte-identical on an 8 GB
   Gemma 4 GGUF); `parseGguf`, `tensorBytes`, `splitQ8`, `splitQ4`; `measure()` (new).
