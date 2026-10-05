@@ -15,12 +15,21 @@ const write = process.argv.includes('--write');
 const STORE = [['opfs-reader.js', 'opfs-reader.js'], ['expert-stream.js', 'moe-expert-stream.js'], ['rows.js', 'rows.js'], ['gguf.js', 'gguf.js'], ['ingest.js', 'ingest.js']];
 const ENGINES = ['qwen3_moe_ssd.js', 'qwen35_moe_ssd.js', 'gemma4_moe_ssd.js'];
 // LocalMind's sibling paths → diskformer's src/ paths, in import and export-from statements.
-const REWRITES = [['./opfs-reader.js', '../src/opfs-reader.js'], ['./moe-expert-stream.js', '../src/expert-stream.js'], ['./gguf.js', '../src/gguf.js'], ['./ingest.js', '../src/ingest.js']];
-const rewrite = (text) => REWRITES.reduce((t, [a, b]) => t.split(`from '${a}'`).join(`from '${b}'`), text);
+const REWRITES = { './opfs-reader.js': '../src/opfs-reader.js', './moe-expert-stream.js': '../src/expert-stream.js', './gguf.js': '../src/gguf.js', './ingest.js': '../src/ingest.js' };
+// Module specifiers only: `from '…'`, `import '…'`, `import('…')`, either quote. A relative specifier that is
+// neither rewritten nor another engine would not resolve in engines/, so it stops the sync.
+const SPEC = /(\bfrom\s*|\bimport\s*\(?\s*)(['"])(\.\/[^'"]+)\2/g;
+function rewrite(text, file) {
+  return text.replace(SPEC, (all, lead, q, spec) => {
+    if (REWRITES[spec]) return `${lead}${q}${REWRITES[spec]}${q}`;
+    if (ENGINES.includes(spec.slice(2))) return all;
+    throw new Error(`${file}: imports ${spec}, which has no copy in diskformer; add it to the sync or remove the import`);
+  });
+}
 
 const pairs = [
   ...STORE.map(([ours, theirs]) => ({ src: join(here, 'src', ours), dst: join(lm, theirs), map: (t) => t })),
-  ...ENGINES.map((f) => ({ src: join(lm, f), dst: join(here, 'engines', f), map: rewrite })),
+  ...ENGINES.map((f) => ({ src: join(lm, f), dst: join(here, 'engines', f), map: (t) => rewrite(t, f) })),
 ];
 let stale = 0;
 for (const { src, dst, map } of pairs) {

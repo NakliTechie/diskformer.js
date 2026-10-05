@@ -1,0 +1,23 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>demo server</title>
+<script type="module">
+// The runner's file server: bad requests get an error status and the server keeps serving.
+//   node examples/run-demo.mjs test/browser/server.html --models <dir> --file <any file in it>
+const url = new URLSearchParams(location.search).get('url');
+const st = async (path, init) => (await fetch(path, { cache: 'no-store', ...init })).status;
+try {
+  const size = Number((await fetch(url, { headers: { Range: 'bytes=0-0' } })).headers.get('content-range').split('/')[1]);
+  const got = {
+    range: await st(url, { headers: { Range: 'bytes=2-5' } }),
+    pastEnd: await st(url, { headers: { Range: `bytes=${size}-` } }),
+    backwards: await st(url, { headers: { Range: 'bytes=8-3' } }),
+    badEscape: await st('/examples/%E0%A4%A'),
+    symlinkOut: await st('/plan/workplan.md'),
+    missing: await st('/nope.js'),
+    stillUp: await st('/README.md'),
+  };
+  const want = { range: 206, pastEnd: 416, backwards: 416, badEscape: 400, symlinkOut: 404, missing: 404, stillUp: 200 };
+  window.result = { ok: JSON.stringify(got) === JSON.stringify(want), got, want };
+} catch (e) { window.result = { ok: false, error: e.message }; }
+</script>

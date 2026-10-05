@@ -34,8 +34,9 @@ Measured on a MacBook M4 Pro with 24 GB, Chrome 154, on 2026-10-05:
 | Gemma 4 26B-A4B, QAT Q4_0 | 14.4 GB | 2.5 GB | 2.02 GB | 12.4 tok/s | 9/9 replies identical to llama.cpp |
 | Qwen3.6 35B-A3B, Q8_0 | 36.9 GB | 4 GB | 3.52 GB | 9.2 tok/s | not compared |
 
-"Identical" means character for character, against llama.cpp b9830's Metal path on the same GGUF. The test covers
-9 conversations, greedy decoding, up to 64 tokens each. Qwen3.6 has no llama.cpp comparison: its Metal path cannot
+"Identical" means the reply text matches llama.cpp b9830's Metal path character for character, on the same GGUF.
+llama-server echoes Gemma's empty thought-channel marker before each reply; the gate removes that marker first. The
+test covers 9 conversations, greedy decoding, up to 64 tokens each. Qwen3.6 has no llama.cpp comparison: its Metal path cannot
 hold 36.9 GB on this Mac.
 
 A larger budget is faster. In the engine benchmark, Gemma decodes at 13.3 tok/s with 2.5 GB and 18.3 with 4.3 GB.
@@ -98,8 +99,9 @@ of 8, through the reader pool. OPFS speed varies a lot between machines; measure
 npm test                                     # Node unit tests: record pool, row cache, GGUF parse and splits, ingest helpers
 node examples/run-demo.mjs rows              # headless Chrome: a 64 MB table on disk, 2,048 rows on the GPU, every byte checked
 node examples/run-demo.mjs embedding         # lookup → slots → a WGSL gather kernel, every output value checked
-node examples/run-demo.mjs chat --budget 2.5 # downloads Gemma once (14.4 GB), replays 9 llama.cpp replies, fails on any difference
+node examples/run-demo.mjs chat --budget 2.5 # downloads Gemma once (14.4 GB) to a fixed profile, replays 9 llama.cpp replies, fails on any difference
 node examples/run-demo.mjs test/browser/ingest-resume.html --models <dir> --file <gguf>   # abort, resume, compare bytes
+node examples/run-demo.mjs test/browser/server.html --models <dir> --file <any file>   # the runner's file server rejects bad requests
 npm run sync                                 # the files shared with LocalMind match their sources
 ```
 

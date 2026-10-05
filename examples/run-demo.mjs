@@ -2,44 +2,60 @@
 //   node examples/run-demo.mjs [rows|embedding] [--profile dir]
 //   node examples/run-demo.mjs test/browser/<page>.html [--models dir --file name.gguf]   a browser test page
 //   node examples/run-demo.mjs chat [--model gemma|qwen] [--budget GB] [--ctx N] [--models dir] [--root name]
-//                                   [--profile dir] [--port N]
+//                                   [--profile dir] [--port N]   (defaults: ~/.cache/diskformer-chat-profile, 8191)
 // chat replays examples/chat/refs/<model>.json (llama.cpp's replies) under a GPU budget and fails on any reply that
 // differs. With --models, the GGUF is served from that folder (HTTP Range) instead of downloaded from Hugging Face.
-// Keep --profile and --port fixed between runs: OPFS belongs to the origin, so the model is stored once.
+// OPFS belongs to the origin, so chat's fixed default profile and port store the model once across runs.
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { createReadStream } from 'node:fs';
-import { readFile, stat, mkdtemp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join, extname, normalize } from 'node:path';
+import { createReadStream, realpathSync } from 'node:fs';
+import { readFile, stat, realpath, mkdtemp } from 'node:fs/promises';
+import { tmpdir, homedir } from 'node:os';
+import { join, extname, normalize, sep } from 'node:path';
 
 const arg = (name, dflt) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : dflt; };
-const root = new URL('..', import.meta.url).pathname;
+const root = realpathSync(new URL('..', import.meta.url).pathname);
 const page = (process.argv[2] || '').endsWith('.html') ? process.argv[2].replace(/^\.?\//, '') : null;
 const example = ['rows', 'embedding', 'chat'].includes(process.argv[2]) ? process.argv[2] : 'rows';
-const models = arg('models');
+const chat = !page && example === 'chat';
+const models = arg('models') && realpathSync(arg('models'));
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json' };
 
+// The real path of base/rel when it is a file inside base (symlinks resolved), else null.
+async function inside(base, rel) {
+  try {
+    const p = await realpath(join(base, rel));
+    return (p.startsWith(base + sep) && (await stat(p)).isFile()) ? p : null;
+  } catch { return null; }
+}
 const server = createServer(async (req, res) => {
-  const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname));
-  if (models && path.startsWith('/models/')) {          // a GGUF, read in byte ranges
-    const p = join(models, path.slice('/models/'.length));
-    let size;
-    try { size = (await stat(p)).size; } catch { res.writeHead(404).end(); return; }
-    const m = /bytes=(\d+)-(\d*)/.exec(req.headers.range || '');
-    if (!m) { res.writeHead(200, { 'Content-Length': size, 'Accept-Ranges': 'bytes' }); createReadStream(p).pipe(res); return; }
-    const start = Number(m[1]), end = Math.min(size - 1, m[2] ? Number(m[2]) : size - 1);
-    res.writeHead(206, { 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': end - start + 1, 'Accept-Ranges': 'bytes' });
-    createReadStream(p, { start, end }).pipe(res);
-    return;
-  }
-  let body;
-  try { body = await readFile(join(root, path)); } catch { res.writeHead(404).end(); return; }
-  res.writeHead(200, { 'Content-Type': types[extname(path)] || 'application/octet-stream' }).end(body);
-}).listen(Number(arg('port', 0)), '127.0.0.1');
+  try {
+    let path;
+    try { path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)); } catch { res.writeHead(400).end(); return; }
+    if (models && path.startsWith('/models/')) {        // a GGUF, read in byte ranges
+      const p = await inside(models, path.slice('/models/'.length));
+      if (!p) { res.writeHead(404).end(); return; }
+      const size = (await stat(p)).size;
+      const m = /^bytes=(\d+)-(\d*)$/.exec(req.headers.range || '');
+      let start = 0, end = size - 1;
+      if (m) {
+        start = Number(m[1]); end = Math.min(size - 1, m[2] ? Number(m[2]) : size - 1);
+        if (start >= size || end < start) { res.writeHead(416, { 'Content-Range': `bytes */${size}` }).end(); return; }
+      }
+      res.writeHead(m ? 206 : 200, { 'Content-Length': size ? end - start + 1 : 0, 'Accept-Ranges': 'bytes', ...(m ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}) });
+      if (!size) { res.end(); return; }
+      createReadStream(p, { start, end }).on('error', () => res.destroy()).pipe(res);
+      return;
+    }
+    const p = await inside(root, path);
+    if (!p) { res.writeHead(404).end(); return; }
+    res.writeHead(200, { 'Content-Type': types[extname(p)] || 'application/octet-stream' }).end(await readFile(p));
+  } catch { if (!res.headersSent) res.writeHead(500); res.end(); }
+}).listen(Number(arg('port', chat ? 8191 : 0)), '127.0.0.1');
 await new Promise((r) => server.once('listening', r));
 const port = server.address().port, cdp = 9500 + (port % 400);
-const profile = arg('profile') || await mkdtemp(join(tmpdir(), 'diskformer-demo-'));
+// chat keeps one profile and port by default, so OPFS (per origin) holds the model across runs.
+const profile = arg('profile') || (chat ? join(homedir(), '.cache/diskformer-chat-profile') : await mkdtemp(join(tmpdir(), 'diskformer-demo-')));
 const chrome = spawn(process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   ['--headless=new', '--no-first-run', `--user-data-dir=${profile}`, '--enable-unsafe-webgpu', `--remote-debugging-port=${cdp}`, 'about:blank'], { stdio: 'ignore' });
 const stop = (code) => { try { chrome.kill(); } catch {} server.close(); process.exit(code); };
@@ -53,7 +69,7 @@ const ev = async (expression) => { const r = await send('Runtime.evaluate', { ex
 
 let url = page ? `http://127.0.0.1:${port}/${page}` : `http://127.0.0.1:${port}/examples/${example}/index.html`, minutes = page ? 30 : 3;
 if (page && models && arg('file')) url += `?url=/models/${encodeURIComponent(arg('file'))}`;
-if (!page && example === 'chat') {
+if (chat) {
   const model = arg('model', 'gemma');
   const file = { gemma: 'gemma-4-26B_q4_0-it.gguf', qwen: 'Qwen3.6-35B-A3B-Q8_0.gguf' }[model];
   const p = new URLSearchParams({ model, gate: `refs/${model}.json`, ctx: arg('ctx', '1024') });
