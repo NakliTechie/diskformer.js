@@ -13,8 +13,9 @@ Plain ES modules, no dependencies, no build step. Chromium with WebGPU. Weights 
 
 | How | Command |
 |---|---|
-| npm | `npm install diskformer` |
-| CDN | `import { RowFile, RowCache } from 'https://cdn.jsdelivr.net/npm/diskformer@0.1/index.js'` |
+| GitHub | `npm install github:NakliTechie/diskformer.js` |
+| npm | `npm install diskformer` (0.1.0 publishes with the announcement; 0.0.1 is a name placeholder) |
+| CDN | `import { RowFile, RowCache } from 'https://cdn.jsdelivr.net/gh/NakliTechie/diskformer.js@main/index.js'` |
 | Copy | the `src/` files and `index.js`; nothing else is needed |
 
 The first call keeps a table on disk and a few thousand of its rows on the GPU. Row files use OPFS sync access
