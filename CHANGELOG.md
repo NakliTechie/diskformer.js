@@ -7,9 +7,13 @@
   from gemma4-webgpu (Apache-2.0, `engines/NOTICE`).
 - `examples/chat`: one page that downloads a model into OPFS and chats under a GPU budget. Gemma 4 26B-A4B (14.4 GB)
   at a 2.5 GB budget: 2.02 GB on the GPU, 9/9 replies identical to llama.cpp b9830 Metal.
-- `ingestGguf` resumes an interrupted ingest from its last 1 GiB checkpoint, and releases its files when it fails.
-- `examples/run-demo.mjs`: a `chat` gate, browser test pages, and local GGUF serving with HTTP Range.
-- `test/browser/ingest-resume.html`: abort at 60%, resume, compare every byte with a clean ingest.
+- `ingestGguf` resumes an interrupted ingest from its last 1 GiB checkpoint, only into the same source (header, size,
+  ETag) and output layout, and closes every file when it fails. Progress events carry `resumedFrom`.
+- `examples/run-demo.mjs`: a `chat` gate (`--budget`, `--models`, `--site` for a deployed copy), browser test pages,
+  local GGUF serving with HTTP Range (416 / 400 / symlink-confined).
+- Tests: `test/ingest-resume.test.mjs` (fake OPFS: abort twice, changed source, failures);
+  `test/browser/ingest-resume.html` (real OPFS, every byte vs a clean ingest); `test/browser/server.html`.
+- `scripts/build-space.mjs` and a Hugging Face Space: https://huggingface.co/spaces/naklitechie/diskformer-chat
 
 ## 0.1.0 (2026-10-05)
 - Store: `OpfsReaderPool`, `OpfsWriter` and OPFS helpers (byte-identical to LocalMind's `opfs-reader.js`); `ingestGguf`
