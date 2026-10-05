@@ -1,7 +1,7 @@
 {
   "name": "diskformer",
-  "version": "0.1.0",
-  "description": "A disk tier for in-browser inference: keep model weights in OPFS and page into WebGPU only what each step needs.",
+  "version": "0.2.0",
+  "description": "Run a model larger than your GPU memory in a browser tab: weights stay in OPFS, WebGPU holds only what each step needs. A disk tier plus two reference MoE engines.",
   "type": "module",
   "license": "MIT",
   "author": "Chirag Patnaik",
@@ -26,17 +26,20 @@
   "files": [
     "index.js",
     "src/",
+    "engines/",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
   ],
   "main": "index.js",
   "exports": {
-    ".": "./index.js"
+    ".": "./index.js",
+    "./engines/*": "./engines/*"
   },
   "scripts": {
     "test": "node test/run.mjs",
-    "demo": "node examples/run-demo.mjs"
+    "demo": "node examples/run-demo.mjs",
+    "sync": "node scripts/sync-localmind.mjs"
   },
   "engines": {
     "node": ">=20"

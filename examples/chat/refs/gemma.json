@@ -1,0 +1,137 @@
+{
+ "about": "llama.cpp b9830 (c1a1c8ee9), Metal, -ngl 99: llama-server /v1/chat/completions, temperature 0, max_tokens 64, on google/gemma-4-26B-A4B-it-qat-q4_0-gguf @ d1c082be (gemma-4-26B_q4_0-it.gguf, sha256 3eca3b8f...eca51d). Recorded 2026-10-05 for LocalMind's parity revalidation.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<|turn>user\nExplain the difference between TCP and UDP to a new programmer.<turn|>\n<|turn>model\n<|channel>thought\n<channel|>",
+   "content": "<|channel>thought\n<channel|>To understand the difference between **TCP** and **UDP**, forget about code for a second and imagine you are sending messages to a friend.\n\n### 1. TCP (Transmission Control Protocol)\n**The \"Certified Mail\" Approach**\n\nImagine you are sending a very important legal document via certified mail. You want",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<|turn>user\nExtract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<turn|>\n<|turn>model\n<|channel>thought\n<channel|>",
+   "content": "<|channel>thought\n<channel|>```json\n{\n  \"name\": \"Priya\",\n  \"city\": \"Lisbon\",\n  \"age\": 34\n}\n```",
+   "finish": "stop",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<|turn>user\nTranslate into Hindi: \"The library opens at nine and closes at six.\"<turn|>\n<|turn>model\n<|channel>thought\n<channel|>",
+   "content": "<|channel>thought\n<channel|>The translation of \"The library opens at nine and closes at six\" in Hindi is:\n\n**पुस्तकालय नौ बजे खुलता है और छह बजे बंद होता है।**\n\n**Transliteration:** \n*Pustakalay nau baje khulta hai aur chhah baje band hota hai.*",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<|turn>user\nA train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<turn|>\n<|turn>model\n<|channel>thought\n<channel|>",
+   "content": "<|channel>thought\n<channel|>To find the duration of the journey, follow these steps:\n\n1.  **Subtract the hours:**\n    17:00 - 14:00 = **3 hours**\n\n2.  **Subtract the minutes:**\n    45 minutes - 10 minutes = **35 minutes",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<|turn>user\nWrite a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<turn|>\n<|turn>model\n<|channel>thought\n<channel|>",
+   "content": "<|channel>thought\n<channel|>To get the five customers with the highest total order value, you need to `JOIN` the two tables, group the results by the customer, and then sum their order amounts.\n\nHere is the SQL query:\n\n```sql\nSELECT \n    c.name, \n    SUM(o.amount)",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<|turn>user\nList five major rivers of Africa, one per line, with the country where each reaches the sea.<turn|>\n<|turn>model\n<|channel>thought\n<channel|>",
+   "content": "<|channel>thought\n<channel|>Nile, Egypt\nCongo, Democratic Republic of the Congo\nNiger, Nigeria\nZambezi, Mozambique\nOrange, South Africa",
+   "finish": "stop",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<|turn>user\nWhat do these emoji usually mean in a text message: 🙏 🔥 💀 ?<turn|>\n<|turn>model\n<|channel>thought\n<channel|>",
+   "content": "<|channel>thought\n<channel|>The meaning of these emojis can change depending on the context and the age of the person sending them, but here is the general breakdown of how they are used in text messages:\n\n### 1. 🙏 (Folded Hands)\nThis emoji is the most versatile and its meaning depends entirely on the tone of the conversation",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<|turn>user\nWrite a haiku about autumn leaves in a city.<turn|>\n<|turn>model\n<|channel>thought\n<channel|>",
+   "content": "<|channel>thought\n<channel|>Gold leaves drift on stone,\nDancing through the concrete maze,\nStreetlights catch the glow.",
+   "finish": "stop",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<|turn>system\nAnswer like a cheerful pirate, in two sentences.<turn|>\n<|turn>user\nWhat is the boiling point of water at sea level?<turn|>\n<|turn>model\n<|channel>thought\n<channel|>",
+   "content": "<|channel>thought\n<channel|>Ahoy there, matey, the waters reach a boil at a sweltering 212 degrees Fahrenheit! Keep a weather eye on that pot so ye don't scald yer treasure!",
+   "finish": "stop",
+   "tokens": 41
+  }
+ ],
+ "speed": {
+  "cache_n": 0,
+  "prompt_n": 24,
+  "prompt_ms": 117.416,
+  "prompt_per_token_ms": 4.892333333333333,
+  "prompt_per_second": 204.40144443687404,
+  "predicted_n": 128,
+  "predicted_ms": 1812.329,
+  "predicted_per_token_ms": 14.1588203125,
+  "predicted_per_second": 70.62735298061224
+ }
+}

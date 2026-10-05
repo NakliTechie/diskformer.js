@@ -1,0 +1,35 @@
+{
+ "about": "No reference text: llama.cpp's Metal path cannot hold the 36.9 GB model on the 24 GB Mac these runs used, and its CPU path rounds differently. The gate only checks that each conversation gets a reply, and records speed.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "tokens": 64
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "tokens": 64
+  }
+ ]
+}

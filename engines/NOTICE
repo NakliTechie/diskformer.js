@@ -1,0 +1,17 @@
+diskformer.js — engines/
+
+The WGSL kernels in these engines are ports of browser-big-fast-lab's custom-kernels engine, an Apache-2.0
+fork of gemma4-webgpu:
+
+  gemma4-webgpu
+  Copyright 2026 Tyler Straub
+  Licensed under the Apache License, Version 2.0 (engines/LICENSE-APACHE)
+  https://github.com/tylerstraub/gemma4-webgpu
+
+Changes from the original: rewritten for mixture-of-experts models whose experts stream from OPFS (Q8_0 and Q4_0
+split planes, slot-indexed expert GEMVs, GPU router top-k, chunked prefill, Q6_K head planes). Everything else in
+this folder is MIT (../LICENSE), Copyright (c) 2026 Chirag Patnaik.
+
+The engine files are copies of LocalMind's (https://github.com/NakliTechie/LocalMind), kept in step by
+scripts/sync-localmind.mjs. Model weights are not distributed: each model is downloaded by the user under its own
+terms (Gemma: https://ai.google.dev/gemma/terms; Qwen3.6: Apache-2.0).

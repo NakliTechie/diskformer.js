@@ -1,0 +1,47 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ingest resume</title>
+<pre id="out">running</pre>
+<script type="module">
+// Interrupt a GGUF ingest past its first range request, resume it, and compare every byte with a clean ingest.
+//   node examples/run-demo.mjs test/browser/ingest-resume.html --models <dir> --file <a Gemma 4 26B-A4B GGUF, ≥2 GiB>
+// Needs room for two copies of the file in OPFS; both are removed at the end.
+import { ingestGguf, removeStore } from '../../src/ingest.js';
+import { GEMMA4_INGEST_PLAN as plan } from '../../engines/gemma4_moe_ssd.js';
+const url = new URLSearchParams(location.search).get('url') || '/models/g4-26b-6l.gguf', root = 'diskformer-test';
+const log = (s) => { document.getElementById('out').textContent += `\n${s}`; window.progressText = s; };
+const file = async (key, name) => (await (await (await (await navigator.storage.getDirectory()).getDirectoryHandle(root)).getDirectoryHandle(key)).getFileHandle(name)).getFile();
+async function same(name) {
+  const a = await file('clean', name), b = await file('resumed', name);
+  if (a.size !== b.size) return { name, same: false, sizes: [a.size, b.size] };
+  for (let at = 0, step = 64 << 20; at < a.size; at += step) {
+    const x = new Uint8Array(await a.slice(at, at + step).arrayBuffer()), y = new Uint8Array(await b.slice(at, at + step).arrayBuffer());
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return { name, same: false, firstDiff: at + i };
+  }
+  return { name, same: true, bytes: a.size };
+}
+try {
+  const t0 = performance.now();
+  for (const k of ['clean', 'resumed']) await removeStore(k, { root }).catch(() => {});
+  log('clean ingest');
+  const clean = await ingestGguf({ url, key: 'clean', root, plan });
+  log('interrupted ingest');
+  const ctrl = new AbortController();
+  let abortedAt = 0, error = null;
+  await ingestGguf({ url, key: 'resumed', root, plan, signal: ctrl.signal, onProgress: (e) => {
+    if (e.status === 'ingest' && !abortedAt && e.loaded > 0.6 * e.total) { abortedAt = e.loaded / e.total; ctrl.abort(); }
+  } }).catch((e) => { error = e.name; });
+  log(`aborted at ${(100 * abortedAt).toFixed(1)}% (${error}); resuming`);
+  let resumed = null, firstLoaded = null;
+  const m = await ingestGguf({ url, key: 'resumed', root, plan, onProgress: (e) => {
+    if (e.status === 'ingest-resume') resumed = e;
+    if (e.status === 'ingest' && firstLoaded === null) firstLoaded = e.loaded / e.total;
+  } });
+  const files = [await same('header.bin'), await same('dense.bin'), await same('experts.bin')];
+  const layoutSame = JSON.stringify([clean.experts, clean.dense]) === JSON.stringify([m.experts, m.dense]);
+  for (const k of ['clean', 'resumed']) await removeStore(k, { root });
+  const ok = !!resumed && error === 'AbortError' && files.every((f) => f.same) && layoutSame && m.complete && m.resumedAtUnit === resumed.unit;
+  window.result = { ok, abortedAt, abortError: error, resumedFrom: resumed && +(resumed.loaded / resumed.total).toFixed(3), resumedAtUnit: m.resumedAtUnit, units: resumed && resumed.units,
+    firstProgressAfterResume: firstLoaded && +firstLoaded.toFixed(3), layoutSame, files, secs: Math.round((performance.now() - t0) / 1000) };
+} catch (e) { window.result = { ok: false, error: e.message, stack: e.stack }; }
+</script>

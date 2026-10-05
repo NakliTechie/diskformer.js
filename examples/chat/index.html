@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>diskformer chat</title>
+<style>
+  :root { --bg: #fafaf9; --fg: #1c1917; --muted: #78716c; --line: #e7e5e4; --card: #fff; --accent: #2563eb; --bad: #b91c1c; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #161514; --fg: #e7e5e4; --muted: #a8a29e; --line: #2e2b29; --card: #1f1d1b; --accent: #60a5fa; --bad: #f87171; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 14px 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  select, input, textarea, button { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; }
+  input[type=number] { width: 90px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 10px 0 6px; }
+  .bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  #status.bad { color: var(--bad); }
+  .meter { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .meter div { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .meter b { display: block; font-size: 20px; }
+  .meter span { font-size: 12px; color: var(--muted); }
+  #log { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+  .msg { white-space: pre-wrap; overflow-wrap: anywhere; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--line); }
+  .msg.user { align-self: flex-end; background: var(--bg); max-width: 85%; }
+  .msg.model { background: var(--card); }
+  form { display: flex; gap: 8px; align-items: end; }
+  textarea { flex: 1; resize: vertical; min-height: 44px; }
+  footer { font-size: 12px; color: var(--muted); margin-top: 24px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>diskformer chat</h1>
+  <p>A mixture-of-experts model larger than the GPU memory you give it, answering in this tab. The model downloads once
+    into this browser's private storage (OPFS). The GPU holds the dense layers and a small cache of experts; the other
+    experts are read from disk as each token needs them.</p>
+  <p class="muted">Chromium with WebGPU. Nothing leaves this tab except the model download from Hugging Face.</p>
+
+  <section class="card">
+    <div class="row">
+      <label>Model <select id="model"></select></label>
+      <label>GPU memory budget (GB) <input id="budget" type="number" min="1" step="0.5"></label>
+      <label>Context (tokens) <select id="ctx"><option>1024</option><option selected>2048</option><option>4096</option></select></label>
+      <button id="load" class="primary">Download and load</button>
+      <button id="remove">Remove from disk</button>
+    </div>
+    <div class="bar"><span id="fill"></span></div>
+    <p id="status" class="muted">Pick a model and a budget. The first load downloads it; later loads take seconds.</p>
+  </section>
+
+  <section class="card" id="meterCard" hidden>
+    <div class="meter">
+      <div><b id="mModel">–</b><span>model on disk</span></div>
+      <div><b id="mGpu">–</b><span id="mGpuNote">GPU memory used</span></div>
+      <div><b id="mCache">–</b><span>experts cached on the GPU</span></div>
+      <div><b id="mSpeed">–</b><span id="mSpeedNote">decode speed</span></div>
+    </div>
+  </section>
+
+  <section id="chat" hidden>
+    <div id="log"></div>
+    <form id="ask">
+      <textarea id="q" rows="2" placeholder="Ask something"></textarea>
+      <button class="primary" id="send">Send</button>
+      <button type="button" id="stop" disabled>Stop</button>
+    </form>
+  </section>
+
+  <footer>Greedy decoding, so the same question gets the same answer. Engines and store:
+    <a href="https://github.com/NakliTechie/diskformer.js">diskformer.js</a>. Model terms: Gemma (ai.google.dev/gemma/terms), Qwen3.6 (Apache-2.0).</footer>
+</main>
+
+<script type="module">
+import { Gemma4MoeSsd, GEMMA4_26B_A4B } from '../../engines/gemma4_moe_ssd.js';
+import { Qwen35MoeSsd, QWEN36_35B_A3B } from '../../engines/qwen35_moe_ssd.js';
+import { removeStore, storeKey } from '../../src/ingest.js';
+
+// ?model=gemma|qwen  ?budget=GB  ?ctx=tokens  ?url=GGUF (a local copy)  ?root=OPFS folder  ?gate=refs.json
+const MODELS = {
+  gemma: { label: 'Gemma 4 26B-A4B · 14.4 GB', Engine: Gemma4MoeSsd, source: GEMMA4_26B_A4B, budget: 3 },
+  qwen: { label: 'Qwen3.6 35B-A3B · 36.9 GB', Engine: Qwen35MoeSsd, source: QWEN36_35B_A3B, budget: 4 },
+};
+const q = new URLSearchParams(location.search);
+const ROOT = q.get('root') || 'diskformer';
+const $ = (id) => document.getElementById(id);
+const GB = (n) => (n / 1e9).toFixed(2) + ' GB';
+let engine = null, messages = [], ctrl = null;
+
+for (const [k, m] of Object.entries(MODELS)) $('model').add(new Option(m.label, k));
+if (MODELS[q.get('model')]) $('model').value = q.get('model');
+const pick = () => MODELS[$('model').value];
+$('budget').value = q.get('budget') || pick().budget;
+if (q.get('ctx')) $('ctx').value = q.get('ctx');
+$('model').onchange = () => { if (!q.get('budget')) $('budget').value = pick().budget; };
+
+const status = (text, bad = false) => { $('status').textContent = text; $('status').className = bad ? 'bad' : 'muted'; window.progressText = text; };
+const fill = (f) => { $('fill').style.width = `${Math.round(100 * f)}%`; };
+addEventListener('error', (e) => status(`Error: ${e.message}`, true));
+addEventListener('unhandledrejection', (e) => status(`Error: ${e.reason && e.reason.message || e.reason}`, true));
+if (!navigator.gpu) status('This page needs WebGPU: Chrome or Edge 121 or later, on a GPU with shader-f16.', true);
+
+async function load() {
+  const m = pick(), budgetGB = Number($('budget').value), maxCtx = Number($('ctx').value);
+  if (engine) { await engine.dispose(); engine = null; }
+  $('load').disabled = true; $('chat').hidden = true;
+  const t0 = performance.now();
+  try {
+    engine = await m.Engine.load(null, {
+      url: q.get('url') || undefined, root: ROOT, gpuBudgetBytes: budgetGB * 1e9, maxCtx,
+      onProgress: (e) => {
+        if (e.status === 'ingest-plan' && e.quota && e.quota - (e.usage || 0) < e.needed)
+          status(`Needs ${GB(e.needed)} of storage; the browser grants ${GB(e.quota - (e.usage || 0))} so far and raises that as the download writes, while the disk has room.`);
+        else if (e.status === 'weights' && e.kind === 'tensors') { fill(e.loaded / e.total); status(`Loading the dense layers onto the GPU: ${e.loaded} of ${e.total} tensors`); }
+        else if (e.status === 'weights') {
+          fill(e.loaded / e.total);
+          const rate = e.secs ? e.loaded / e.secs : 0, left = rate ? (e.total - e.loaded) / rate : 0;
+          status(`Downloading into this browser's storage (once): ${GB(e.loaded)} of ${GB(e.total)}${rate ? ` · ${(rate / 1e6).toFixed(0)} MB/s · ${Math.ceil(left / 60)} min left` : ''}`);
+        } else if (e.status === 'init') status('Starting WebGPU');
+      },
+    });
+  } catch (e) { status(`Could not load: ${e.message}`, true); $('load').disabled = false; throw e; }
+  engine.device.lost.then((info) => status(`The GPU device was lost: ${info.message}. Reload the page.`, true));
+  fill(1);
+  const used = Object.values(engine.gpuBytes).reduce((a, b) => a + b, 0), c = engine.cfg;
+  const disk = engine.manifest.experts.bytes + engine.manifest.dense.bytes;
+  $('mModel').textContent = GB(m.source.size);
+  $('mGpu').textContent = GB(used);
+  $('mGpuNote').textContent = `GPU memory used, budget ${budgetGB} GB`;
+  $('mCache').textContent = `${engine.poolSlots.toLocaleString()} of ${(c.layers * c.experts).toLocaleString()}`;
+  $('meterCard').hidden = false; $('chat').hidden = false; $('load').disabled = false;
+  status(`Loaded in ${((performance.now() - t0) / 1000).toFixed(1)} s. ${GB(disk)} in OPFS; ${GB(used)} on the GPU.`);
+  messages = []; $('log').replaceChildren();
+  return { model: $('model').value, budgetGB, maxCtx, modelBytes: m.source.size, diskBytes: disk, gpuBytes: used, gpuBytesByKind: { ...engine.gpuBytes }, poolSlots: engine.poolSlots, experts: c.layers * c.experts };
+}
+
+// One reply, streamed into onText. Returns the text and its timing.
+async function reply(history, { maxNewTokens = 1024, onText = () => {} } = {}) {
+  ctrl = new AbortController();
+  const t0 = performance.now();
+  let text = '', tokens = 0, tFirst = 0;
+  for await (const r of engine.generate(history, { maxNewTokens, signal: ctrl.signal, enableThinking: false })) {
+    if (!tokens) tFirst = performance.now();
+    text = r.text; tokens = r.tokens; onText(text);
+  }
+  const decodeSecs = (performance.now() - tFirst) / 1000;
+  return { text, tokens, firstTokenMs: Math.round(tFirst - t0), decodeTokPerSec: tokens > 1 ? +((tokens - 1) / decodeSecs).toFixed(2) : null };
+}
+
+function bubble(role, text) { const d = document.createElement('div'); d.className = `msg ${role}`; d.textContent = text; $('log').append(d); return d; }
+
+$('load').onclick = () => load().catch(() => {});
+$('remove').onclick = async () => {
+  if (engine) { await engine.dispose(); engine = null; }
+  await removeStore(storeKey(pick().source.file), { root: ROOT });
+  $('chat').hidden = true; $('meterCard').hidden = true; fill(0);
+  status(`Removed ${pick().label.split(' · ')[0]} from this browser's storage.`);
+};
+$('stop').onclick = () => ctrl && ctrl.abort();
+$('q').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('ask').requestSubmit(); } };
+$('ask').onsubmit = async (e) => {
+  e.preventDefault();
+  const text = $('q').value.trim();
+  if (!text || !engine) return;
+  $('q').value = ''; $('send').disabled = true; $('stop').disabled = false;
+  messages.push({ role: 'user', content: text });
+  bubble('user', text);
+  const out = bubble('model', '…');
+  try {
+    const r = await reply(messages, { onText: (t) => { out.textContent = t; } });
+    messages.push({ role: 'assistant', content: r.text });
+    if (r.decodeTokPerSec) { $('mSpeed').textContent = `${r.decodeTokPerSec} tok/s`; $('mSpeedNote').textContent = `decode speed · first token ${(r.firstTokenMs / 1000).toFixed(1)} s`; }
+  } catch (err) { out.textContent = `Error: ${err.message}`; messages.pop(); }
+  $('send').disabled = false; $('stop').disabled = true;
+};
+
+// Gate: load, then replay each reference conversation and compare the text with llama.cpp's.
+async function gate(url) {
+  const ref = await (await fetch(url, { cache: 'no-store' })).json();
+  const info = await load();
+  const PREFIX = '<|channel>thought\n<channel|>';
+  const rows = [];
+  for (const c of ref.conversations) {
+    status(`Gate: ${c.name} (${rows.length + 1} of ${ref.conversations.length})`);
+    const r = await reply(c.messages, { maxNewTokens: c.tokens || 64 });
+    if (c.content === undefined) { rows.push({ name: c.name, text: r.text, tokens: r.tokens, decodeTokPerSec: r.decodeTokPerSec, firstTokenMs: r.firstTokenMs }); continue; }
+    const theirs = c.content.startsWith(PREFIX) ? c.content.slice(PREFIX.length) : c.content;
+    let at = 0; while (at < r.text.length && at < theirs.length && r.text[at] === theirs[at]) at++;
+    rows.push({ name: c.name, identical: r.text === theirs, sameUpTo: at, chars: r.text.length, tokens: r.tokens, decodeTokPerSec: r.decodeTokPerSec, firstTokenMs: r.firstTokenMs, ...(r.text === theirs ? {} : { ours: r.text, theirs }) });
+  }
+  // A conversation without reference text (no llama.cpp run to compare with) only has to produce a reply.
+  const compared = rows.filter((r) => 'identical' in r), identical = compared.filter((r) => r.identical).length;
+  const speeds = rows.map((r) => r.decodeTokPerSec).filter(Boolean).sort((a, b) => a - b);
+  const ok = identical === compared.length && rows.every((r) => r.tokens > 0);
+  window.result = { ok, identical, compared: compared.length, of: rows.length, ...info, medianDecodeTokPerSec: speeds[speeds.length >> 1], rows };
+  status(`Gate: ${identical} of ${compared.length} replies identical to the reference; ${rows.length - compared.length} without one.`);
+}
+
+window.demo = { load, reply, get engine() { return engine; } };
+if (q.get('gate')) gate(q.get('gate')).catch((e) => { window.result = { ok: false, error: e.message, stack: e.stack }; });
+else if (q.get('auto')) load().catch(() => {});
+</script>
+</body>
+</html>
