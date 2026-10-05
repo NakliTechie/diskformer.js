@@ -20,8 +20,8 @@ Plain ES modules, no dependencies, no build step. Chromium with WebGPU. Weights 
 
 ## Try it: a 14.4 GB model in 2.5 GB of GPU memory
 
-`examples/chat` is one static page. Pick a model and a GPU memory budget. The page downloads the model once into
-OPFS, resumably, then chats. Serve the repo and open it:
+Open the [Hugging Face Space](https://naklitechie-diskformer-chat.static.hf.space/), or serve `examples/chat` yourself.
+Pick a model and a GPU memory budget. The page downloads the model once into OPFS, resumably, then chats.
 
 ```bash
 python3 -m http.server 8000      # then open http://localhost:8000/examples/chat/
@@ -32,6 +32,8 @@ Measured on a MacBook M4 Pro with 24 GB, Chrome 154, on 2026-10-05:
 | Model | On disk | GPU budget | GPU memory used | Decode | Output |
 |---|---|---|---|---|---|
 | Gemma 4 26B-A4B, QAT Q4_0 | 14.4 GB | 2.5 GB | 2.02 GB | 12.4 tok/s | 9/9 replies identical to llama.cpp |
+| Gemma 4 26B-A4B, QAT Q4_0 | 14.4 GB | 4.3 GB | 3.93 GB | 14.2 tok/s | 9/9 |
+| Gemma 4 26B-A4B, QAT Q4_0 | 14.4 GB | 7 GB | 6.63 GB | 17.9 tok/s | 9/9 |
 | Qwen3.6 35B-A3B, Q8_0 | 36.9 GB | 4 GB | 3.52 GB | 9.2 tok/s | not compared |
 
 "Identical" means the reply text matches llama.cpp b9830's Metal path character for character, on the same GGUF.
@@ -39,9 +41,8 @@ llama-server echoes Gemma's empty thought-channel marker before each reply; the 
 test covers 9 conversations, greedy decoding, up to 64 tokens each. Qwen3.6 has no llama.cpp comparison: its Metal path cannot
 hold 36.9 GB on this Mac.
 
-A larger budget is faster. In the engine benchmark, Gemma decodes at 13.3 tok/s with 2.5 GB and 18.3 with 4.3 GB.
-With a 4 GiB expert cache it decodes at 23.6, in a 6.9 GB GPU process. Only Apple silicon is tested; discrete GPUs
-and 8–16 GB machines are not.
+Each row is `node examples/run-demo.mjs chat --budget <GB>`; decode is the median over the 9 replies. A larger budget
+caches more experts. Only Apple silicon is tested; discrete GPUs and 8–16 GB machines are not.
 
 In your own page:
 
@@ -88,10 +89,8 @@ and an f16-scale plane, bit-exact. An interrupted ingest resumes from its last 1
 (also `RecordPool`) keeps a fixed GPU slot pool of expert records. `ensure(layer, ids)` returns pinned slots,
 `prefetch(layer, guesses)` never blocks, and uploads go through a mapped staging ring.
 
-## Measure the disk
-
-`measure({ path, recordBytes })` reports sequential MB/s and random whole-record reads, one at a time and in bursts
-of 8, through the reader pool. OPFS speed varies a lot between machines; measure where your users run.
+`measure({ path, recordBytes })` reports the disk's sequential MB/s and random record reads; OPFS speed varies a lot
+between machines, so measure where your users run.
 
 ## Commands
 
@@ -107,10 +106,9 @@ npm run sync                                 # the files shared with LocalMind m
 
 ## Verify it yourself
 
-`node examples/run-demo.mjs chat` runs the chat page in headless Chrome under a GPU budget. It replays the
-conversations in `examples/chat/refs/gemma.json`, which holds llama.cpp's replies, and exits 1 on any reply that
-differs. Pass `--models <dir>` to serve a local GGUF instead of downloading it. The resume test aborts an ingest at
-60%, resumes it, and compares every byte with a clean ingest.
+`node examples/run-demo.mjs chat` runs the chat page in headless Chrome under a GPU budget and replays
+`examples/chat/refs/gemma.json` (llama.cpp's replies); any differing reply exits 1. `--models <dir>` serves a local
+GGUF instead of downloading it; `--site <url>` gates a deployed copy, such as the Space.
 
 The code runs in [LocalMind](https://github.com/NakliTechie/LocalMind) on its live site. `src/` (all but `measure.js`)
 and `engines/` are byte-identical to LocalMind's copies, apart from the engines' import paths.

@@ -3,6 +3,7 @@
 //   node examples/run-demo.mjs test/browser/<page>.html [--models dir --file name.gguf]   a browser test page
 //   node examples/run-demo.mjs chat [--model gemma|qwen] [--budget GB] [--ctx N] [--models dir] [--root name]
 //                                   [--profile dir] [--port N]   (defaults: ~/.cache/diskformer-chat-profile, 8191)
+//                                   [--site URL]   gate a deployed copy of the page (e.g. the HF Space) instead
 // chat replays examples/chat/refs/<model>.json (llama.cpp's replies) under a GPU budget and fails on any reply that
 // differs. With --models, the GGUF is served from that folder (HTTP Range) instead of downloaded from Hugging Face.
 // OPFS belongs to the origin, so chat's fixed default profile and port store the model once across runs.
@@ -76,7 +77,7 @@ if (chat) {
   if (arg('budget')) p.set('budget', arg('budget'));
   if (arg('root')) p.set('root', arg('root'));
   if (models) p.set('url', `/models/${file}`);
-  url += `?${p}`; minutes = 90;                         // a first run downloads the model
+  url = `${arg('site') || url}?${p}`; minutes = 90;     // a first run downloads the model
 }
 await send('Page.navigate', { url });
 let last = '', lastAt = 0;
