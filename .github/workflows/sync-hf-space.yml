@@ -1,0 +1,39 @@
+name: Sync the Hugging Face Space
+
+# Rebuilds the Space tree (scripts/build-space.mjs) and mirrors it to naklitechie/diskformer-chat on every push to
+# main that touches what the Space serves. Needs the HF_TOKEN repo secret (write access to that Space); without it
+# the job says so and exits 0.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - src/**
+      - engines/**
+      - examples/chat/**
+      - scripts/build-space.mjs
+      - LICENSE
+      - .github/workflows/sync-hf-space.yml
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Build and upload
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [ -z "$HF_TOKEN" ]; then echo "HF_TOKEN is not set; skipping the Space sync"; exit 0; fi
+          node scripts/build-space.mjs space
+          pip install --quiet huggingface_hub
+          python3 - <<'PY'
+          from huggingface_hub import HfApi
+          # upload_folder, not `hf upload`: the CLI re-creates the repo without an SDK and gets HTTP 402.
+          HfApi().upload_folder(repo_id='naklitechie/diskformer-chat', repo_type='space', folder_path='space',
+              commit_message='Sync from GitHub', delete_patterns=['*.html', '*.md', 'LICENSE', 'src/**', 'engines/**', 'refs/**'])
+          PY
