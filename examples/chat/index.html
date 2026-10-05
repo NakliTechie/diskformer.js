@@ -44,6 +44,8 @@
     into this browser's private storage (OPFS). The GPU holds the dense layers and a small cache of experts; the other
     experts are read from disk as each token needs them.</p>
   <p class="muted">Chromium with WebGPU. Nothing leaves this tab except the model download from Hugging Face.</p>
+  <p id="framed" hidden>This page is inside a frame, where browser storage can be partitioned or limited.
+    <a id="ownTab" target="_blank" rel="noopener">Open it in its own tab</a> to keep the model in first-party storage.</p>
 
   <section class="card">
     <div class="row">
@@ -113,6 +115,7 @@ const controls = () => {
 // The OPFS folder a model's store lives in: the loaded engine's, else the name the engine would give it.
 const keyOf = (m) => (engine && engine.constructor === m.Engine ? engine.opts.key : storeKey(m === MODELS.qwen && q.get('url') ? q.get('url').split('/').pop() : m.source.file));
 controls();
+if (window.self !== window.top) { $('framed').hidden = false; $('ownTab').href = location.href; }
 if (!navigator.gpu) status('This page needs WebGPU: Chrome or Edge 121 or later, on a GPU with shader-f16.', true);
 
 async function load() {
