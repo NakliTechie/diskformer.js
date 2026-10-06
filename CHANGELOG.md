@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+- `fileFetch(blob)`: ingest a GGUF that is already on disk (a `File` the user picked, e.g. from a Hugging Face or
+  LM Studio cache) through `ingestGguf({ fetch: fileFetch(file) })`, with no download. The store is byte-identical to a
+  download's, and an interrupted file ingest resumes from the same file (`test/ingest-resume.test.mjs`).
+- `engines/`: `load({ localFile })` ingests the pinned GGUF from a local file, refusing a file of another size.
+
 ## 0.2.0 (2026-10-05)
 - `engines/`: reference WebGPU engines for Gemma 4 26B-A4B (`Gemma4MoeSsd`), Qwen3.6 35B-A3B (`Qwen35MoeSsd`) and
   Qwen3-30B-A3B (`Qwen3MoeSsd`), copied from LocalMind with import paths rewritten (`scripts/sync-localmind.mjs`).

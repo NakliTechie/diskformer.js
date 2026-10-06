@@ -2,7 +2,7 @@
 // a changed source (same header, new ETag), and failures while opening or writing must leave no file open, and every
 // completed store must equal a clean ingest byte for byte.   node test/ingest-resume.test.mjs
 import assert from 'node:assert/strict';
-import { ingestGguf } from '../src/ingest.js';
+import { ingestGguf, fileFetch } from '../src/ingest.js';
 import { GGML } from '../src/gguf.js';
 
 // A GGUF v3 header with one F32 tensor, then `n` data bytes from `fill`.
@@ -124,4 +124,30 @@ const cleanB = fakeIo(); assert.ok((await run(cleanB, b)).m.complete); const ref
   const fs = fakeIo(); fs.fail.writeAt = N / 2 - UNIT;          // the last unit of experts.bin
   assert.match((await run(fs, a)).error.message, /write failed/); assert.equal(fs.openCount(), 0);
 }
-console.log('ingest-resume: ok (abort + abort during resume + finish = clean bytes; changed source starts over; failures close every file)');
+// A local file as the source (fileFetch over a Blob): the same store as the download, byte for byte; an abort
+// resumes from the same file; a download's interrupted state is not resumed from a file (no ETag to match).
+{
+  const runFile = (fs, src, { abortAt = Infinity } = {}) => {
+    const ctrl = new AbortController(), events = [];
+    return ingestGguf({ url: 'm.gguf', key: 'k', plan: plan(src.head), fetch: fileFetch(new Blob([src.file])), signal: ctrl.signal, rangeBytes: 256, io: fs.io,
+      onProgress: (e) => { events.push(e); if (e.status === 'ingest' && e.loaded / e.total >= abortAt) ctrl.abort(); } })
+      .then((m) => ({ m, events }), (error) => ({ error, events }));
+  };
+  const fs = fakeIo();
+  assert.ok((await runFile(fs, a)).m.complete); assert.deepEqual(bytes(fs), refA); assert.equal(fs.openCount(), 0);
+  const fs2 = fakeIo();
+  assert.equal((await runFile(fs2, a, { abortAt: 0.5 })).error.name, 'AbortError'); assert.equal(fs2.openCount(), 0);
+  const r = await runFile(fs2, a);
+  assert.ok(r.events.some((e) => e.status === 'ingest-resume'), 'a file ingest resumes from the same file');
+  assert.deepEqual(bytes(fs2), refA);
+  const fs3 = fakeIo();
+  assert.equal((await run(fs3, a, { abortAt: 0.5 })).error.name, 'AbortError');
+  const r3 = await runFile(fs3, a);
+  assert.ok(!r3.events.some((e) => e.status === 'ingest-resume'), 'a download is not resumed from a file');
+  assert.deepEqual(bytes(fs3), refA);
+  const ff = fileFetch(new Blob([new Uint8Array(10)]));
+  const r206 = await ff('x', { headers: { Range: 'bytes=4-99' } });
+  assert.equal(r206.status, 206); assert.equal(r206.headers.get('content-range'), 'bytes 4-9/10'); assert.equal((await r206.arrayBuffer()).byteLength, 6);
+  assert.equal((await ff('x', { headers: { Range: 'bytes=10-19' } })).status, 416);
+}
+console.log('ingest-resume: ok (abort + abort during resume + finish = clean bytes; changed source starts over; failures close every file; a local file ingests the same bytes and resumes from itself)');

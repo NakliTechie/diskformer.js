@@ -4,5 +4,5 @@ export { OpfsReaderPool, OpfsWriter, canInline, opfsDir, readOpfsText, writeOpfs
 export { ExpertStreamer, ExpertStreamer as RecordPool } from './src/expert-stream.js';
 export { RowFile, RowCache, fingerprint } from './src/rows.js';
 export { parseGguf, tensorBytes, splitQ8, splitQ4, GGML, Q8_BLOCK, Q4_BLOCK, Q6K_BLOCK } from './src/gguf.js';
-export { ingestGguf, ingestProgress, readHeader, storeKey, removeStore } from './src/ingest.js';
+export { ingestGguf, ingestProgress, readHeader, fileFetch, storeKey, removeStore } from './src/ingest.js';
 export { measure } from './src/measure.js';

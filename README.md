@@ -83,14 +83,14 @@ O(1) LRU and an optional GPU id→slot map that kernels can read. `examples/embe
 
 ## Experts on disk
 
-`ingestGguf({ url, key, plan })` streams a GGUF over HTTP ranges into OPFS in your engine's layout. `plan.layout` says
-where each tensor goes. `plan.units` lists the byte ranges to copy or split: Q8_0 and Q4_0 blocks become a value plane
-and an f16-scale plane, bit-exact. An interrupted ingest resumes from its last 1 GiB checkpoint. `ExpertStreamer`
-(also `RecordPool`) keeps a fixed GPU slot pool of expert records. `ensure(layer, ids)` returns pinned slots,
-`prefetch(layer, guesses)` never blocks, and uploads go through a mapped staging ring.
+`ingestGguf({ url, key, plan })` streams a GGUF over HTTP ranges into OPFS in your engine's layout: `plan.layout` says
+where each tensor goes, `plan.units` the byte ranges to copy or split (Q8_0 and Q4_0 blocks become a value plane and an
+f16-scale plane, bit-exact). It resumes from its last 1 GiB checkpoint. For a GGUF already on disk, pass a picked `File`
+as `fetch: fileFetch(file)`: no download, same store. `ExpertStreamer` (also `RecordPool`) keeps a fixed GPU slot pool
+of expert records: `ensure(layer, ids)` returns pinned slots, `prefetch(layer, guesses)` never blocks, and uploads go
+through a mapped staging ring.
 
-`measure({ path, recordBytes })` reports the disk's sequential MB/s and random record reads; OPFS speed varies a lot
-between machines, so measure where your users run.
+`measure({ path, recordBytes })` reports sequential MB/s and random record reads; OPFS speed varies by machine.
 
 ## Commands
 
