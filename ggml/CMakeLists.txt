@@ -30,12 +30,12 @@ target_compile_features(df-chat PRIVATE cxx_std_17)
 
 if(EMSCRIPTEN)
     # llama.cpp builds its wasm as memory64 (LLAMA_WASM_MEM64), so the driver must too
-    set_target_properties(df-chat PROPERTIES SUFFIX ".mjs")
+    set_target_properties(df-chat PROPERTIES SUFFIX ".mjs" LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/df_gpu.js)
     target_compile_options(df-chat PRIVATE -sMEMORY64=1)
     target_link_options(df-chat PRIVATE
         -sMEMORY64=1 -sMODULARIZE -sEXPORT_ES6 -sENVIRONMENT=worker
         -sALLOW_MEMORY_GROWTH -sMAXIMUM_MEMORY=8GB -sSTACK_SIZE=8MB
-        -lworkerfs.js
+        -lworkerfs.js --js-library ${CMAKE_CURRENT_SOURCE_DIR}/df_gpu.js
         "-sEXPORTED_FUNCTIONS=['_df_load','_df_chat','_df_complete','_df_stats','_malloc','_free']"
         "-sJSPI_EXPORTS=['df_load','df_chat','df_complete']"
         "-sEXPORTED_RUNTIME_METHODS=['FS','WORKERFS','UTF8ToString','stringToNewUTF8']")

@@ -21,15 +21,21 @@
   };
   const refs = await (await fetch(q.get('refs'))).json();
   const worker = new Worker('./worker.mjs', { type: 'module' });
+  window.gateLog = [];
   const next = () => new Promise((resolve, reject) => {
-    worker.onmessage = ({ data }) => data.type === 'error' ? reject(new Error(data.message)) : (data.type === 'loaded' || data.type === 'done') && resolve(data);
+    worker.onmessage = ({ data }) => {
+      if (data.type === 'log' && /ggml_webgpu paged/.test(data.line)) window.gateLog.push(data.line);
+      if (data.type === 'error') reject(new Error(data.message));
+      else if (data.type === 'loaded' || data.type === 'done') resolve(data);
+    };
   });
   out.textContent = `model ${q.get('model')} · slots ${q.get('slots')}`;
   worker.postMessage({ type: 'load', opfsName: q.get('model'), slots: +q.get('slots') });
   const loaded = await next();
   say(`loaded in ${(loaded.ms / 1000).toFixed(1)} s (rc ${loaded.rc})`);
   const results = [];
-  for (const c of refs.conversations) {
+  const only = q.get('only');
+  for (const c of refs.conversations.filter((c) => !only || only.split(',').includes(c.name))) {
     const want = expected(c.prompt, c.content);
     worker.postMessage({ type: 'complete', prompt: c.prompt, n: c.tokens });
     const r = await next();

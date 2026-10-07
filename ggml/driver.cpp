@@ -100,6 +100,24 @@ static void df_src_read_batch(void * ud, size_t n, const char * const * names, c
 #endif
 }
 
+#ifdef __EMSCRIPTEN__
+// df_gpu.js: n ranges of the GGUF into GPU buffers through mapped staging buffers
+extern "C" void df_upload_batch_js(void * device, int n, const double * offsets, const double * sizes,
+                                   void * const * buffers, const double * dst_offsets);
+
+static void df_src_upload_batch(void * ud, void * device, size_t n, const char * const * names, const size_t * offs,
+                                const size_t * sizes, void * const * buffers, const size_t * dst_offs) {
+    auto *              src = (df_gguf_source *) ud;
+    std::vector<double> o(n), sz(n), d(n);
+    for (size_t i = 0; i < n; i++) {
+        o[i]  = (double) (src->offsets.at(names[i]) + offs[i]);
+        sz[i] = (double) sizes[i];
+        d[i]  = (double) dst_offs[i];
+    }
+    df_upload_batch_js(device, (int) n, o.data(), sz.data(), buffers, d.data());
+}
+#endif
+
 static void df_src_read(void * ud, const char * name, size_t off, void * dst, size_t size) {
     void * d = dst;
     df_src_read_batch(ud, 1, &name, &off, &d, &size);
@@ -138,7 +156,11 @@ static ggml_backend_buffer_type_t df_paged_buft(int n_slots) {
     if (make == nullptr) {
         return nullptr;
     }
-    static ggml_webgpu_page_source src = { &g_src, df_src_has, df_src_write, df_src_read, df_src_read_batch };
+#ifdef __EMSCRIPTEN__
+    static ggml_webgpu_page_source src = { &g_src, df_src_has, df_src_write, df_src_read, df_src_read_batch, df_src_upload_batch };
+#else
+    static ggml_webgpu_page_source src = { &g_src, df_src_has, df_src_write, df_src_read, df_src_read_batch, nullptr };
+#endif
     return make(ggml_backend_reg_dev_get(reg, 0), (uint32_t) n_slots, &src);
 }
 
