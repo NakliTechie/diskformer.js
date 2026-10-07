@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>diskformer · paged gate</title>
+<style>
+  :root { --bg: #fafaf8; --fg: #1c1c1a; --muted: #6b6b66; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #141413; --fg: #e8e8e3; --muted: #9a9a93; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 ui-monospace, monospace; }
+  main { max-width: 900px; margin: 0 auto; padding: 24px 16px; } pre { white-space: pre-wrap; }
+</style>
+<main><pre id="out">gate: ?model=&lt;GGUF name in OPFS&gt;&amp;refs=&lt;json&gt;&amp;slots=N</pre></main>
+<script type="module">
+  // Replays llama.cpp's replies (examples/chat/refs/*.json) through llama.cpp + WebGPU_Paged in this tab.
+  const q = new URLSearchParams(location.search);
+  const out = document.getElementById('out');
+  const say = (l) => { out.textContent += '\n' + l; };
+  const expected = (prompt, content) => {
+    for (let k = Math.min(prompt.length, content.length); k > 0; k--) if (prompt.endsWith(content.slice(0, k))) return content.slice(k);
+    return content;
+  };
+  const refs = await (await fetch(q.get('refs'))).json();
+  const worker = new Worker('./worker.mjs', { type: 'module' });
+  const next = () => new Promise((resolve, reject) => {
+    worker.onmessage = ({ data }) => data.type === 'error' ? reject(new Error(data.message)) : (data.type === 'loaded' || data.type === 'done') && resolve(data);
+  });
+  out.textContent = `model ${q.get('model')} · slots ${q.get('slots')}`;
+  worker.postMessage({ type: 'load', opfsName: q.get('model'), slots: +q.get('slots') });
+  const loaded = await next();
+  say(`loaded in ${(loaded.ms / 1000).toFixed(1)} s (rc ${loaded.rc})`);
+  const results = [];
+  for (const c of refs.conversations) {
+    const want = expected(c.prompt, c.content);
+    worker.postMessage({ type: 'complete', prompt: c.prompt, n: c.tokens });
+    const r = await next();
+    let at = 0;
+    while (at < r.text.length && r.text[at] === want[at]) at++;
+    const ok = r.text === want;
+    const tps = r.stats.decode_tokens / (r.stats.decode_ms / 1000);
+    results.push({ name: c.name, ok, text: r.text, stats: r.stats });
+    say(`${ok ? 'OK  ' : 'DIFF'} ${c.name.padEnd(22)} ${tps.toFixed(2)} tok/s${ok ? '' : `  first difference at char ${at} of ${want.length}`}`);
+  }
+  const same = results.filter((r) => r.ok).length;
+  say(`${same}/${results.length} identical to the reference`);
+  window.gate = { same, total: results.length, results };
+</script>
+</html>

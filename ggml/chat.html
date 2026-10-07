@@ -48,6 +48,7 @@
   };
   worker.onmessage = ({ data }) => {
     if (data.type === 'log') $('log').textContent += data.line + '\n';
+    else if (data.type === 'progress') $('status').textContent = `Copying into browser storage… ${(data.copied / 1e9).toFixed(1)} of ${(data.total / 1e9).toFixed(1)} GB`;
     else if (data.type === 'piece') $('reply').textContent += data.piece;
     else if (data.type === 'loaded') {
       $('status').textContent = data.rc === 0 ? `Loaded in ${(data.ms / 1000).toFixed(1)} s.` : `Load failed (code ${data.rc}); see log.`;

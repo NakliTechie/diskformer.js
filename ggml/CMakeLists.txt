@@ -36,7 +36,7 @@ if(EMSCRIPTEN)
         -sMEMORY64=1 -sMODULARIZE -sEXPORT_ES6 -sENVIRONMENT=worker
         -sALLOW_MEMORY_GROWTH -sMAXIMUM_MEMORY=8GB -sSTACK_SIZE=8MB
         -lworkerfs.js
-        "-sEXPORTED_FUNCTIONS=['_df_load','_df_chat','_df_stats','_malloc','_free']"
-        "-sJSPI_EXPORTS=['df_load','df_chat']"
+        "-sEXPORTED_FUNCTIONS=['_df_load','_df_chat','_df_complete','_df_stats','_malloc','_free']"
+        "-sJSPI_EXPORTS=['df_load','df_chat','df_complete']"
         "-sEXPORTED_RUNTIME_METHODS=['FS','WORKERFS','UTF8ToString','stringToNewUTF8']")
 endif()
