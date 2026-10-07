@@ -17,4 +17,5 @@ if (space) await cp(join(here, 'examples/chat/space-README.md'), join(out, 'READ
 await cp(join(here, 'examples/chat/refs'), join(out, 'refs'), { recursive: true });
 for (const d of ['src', 'engines']) await cp(join(here, d), join(out, d), { recursive: true });
 await cp(join(here, 'LICENSE'), join(out, 'LICENSE'));
+await cp(join(here, 'marketing/social.png'), join(out, 'social.png'));  // the og:image / twitter:image card
 console.log(`${space ? 'Space' : 'site'} files in ${out}`);
