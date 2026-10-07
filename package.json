@@ -1,6 +1,6 @@
 {
   "name": "diskformer",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Run a model larger than your GPU memory in a browser tab: weights stay in OPFS, WebGPU holds only what each step needs. A disk tier plus two reference MoE engines.",
   "type": "module",
   "license": "MIT",

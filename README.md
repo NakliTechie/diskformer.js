@@ -15,7 +15,7 @@ Plain ES modules, no dependencies, no build step. Chromium with WebGPU. Weights 
 | How | Command |
 |---|---|
 | npm | `npm install diskformer` |
-| CDN | `import { Gemma4MoeSsd } from 'https://cdn.jsdelivr.net/npm/diskformer@0.2/engines/gemma4_moe_ssd.js'` |
+| CDN | `import { Gemma4MoeSsd } from 'https://cdn.jsdelivr.net/npm/diskformer@0.3/engines/gemma4_moe_ssd.js'` |
 | Copy | `src/`, `engines/` and `index.js`; nothing else is needed |
 
 ## Try it: a 14.4 GB model in 2.5 GB of GPU memory
