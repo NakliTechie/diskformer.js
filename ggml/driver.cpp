@@ -314,6 +314,8 @@ int main(int argc, char ** argv) {
     if (std::string(argv[3]) != "--gate") {
         df_chat(argv[3], argc > 4 ? atoi(argv[4]) : 64);
         fprintf(stderr, "\n%s\n", df_stats());
+        llama_free(g_ctx);
+        llama_model_free(g_model);
         return 0;
     }
     std::ifstream  in(argv[4]);
