@@ -10,6 +10,8 @@ Plain ES modules, no dependencies, no build step. Chromium with WebGPU. Weights 
 [![license](https://img.shields.io/badge/license-MIT-555?style=flat-square)](LICENSE)
 [![dependencies](https://img.shields.io/badge/dependencies-none-555?style=flat-square)](package.json)
 
+[![The diskformer.js card: keep model weights on disk in the browser, and page into WebGPU only what each step needs](marketing/social.png)](https://diskformer.naklitechie.com/)
+
 ## Install
 
 | How | Command |
@@ -36,10 +38,9 @@ Measured on a MacBook M4 Pro with 24 GB, Chrome 154, on 2026-10-05:
 | Gemma 4 26B-A4B, QAT Q4_0 | 14.4 GB | 7 GB | 6.63 GB | 17.9 tok/s | 9/9 |
 | Qwen3.6 35B-A3B, Q8_0 | 36.9 GB | 4 GB | 3.52 GB | 9.2 tok/s | not compared |
 
-"Identical" means the reply text matches llama.cpp b9830's Metal path character for character, on the same GGUF.
-llama-server echoes Gemma's empty thought-channel marker before each reply; the gate removes that marker first. The
-test covers 9 conversations, greedy decoding, up to 64 tokens each. Qwen3.6 has no llama.cpp comparison: its Metal path cannot
-hold 36.9 GB on this Mac.
+"Identical" means the reply text matches llama.cpp b9830's Metal path character for character on the same GGUF. The
+gate first drops the empty thought-channel marker llama-server echoes before each Gemma reply. 9 conversations,
+greedy, up to 64 tokens each. Qwen3.6 is not compared: llama.cpp's Metal path cannot hold 36.9 GB here.
 
 Each row is `node examples/run-demo.mjs chat --budget <GB>`; decode is the median over the 9 replies. A larger budget
 caches more experts. Only Apple silicon is tested; discrete GPUs and 8–16 GB machines are not.
@@ -53,8 +54,7 @@ const engine = await Gemma4MoeSsd.load(null, { gpuBudgetBytes: 3e9, onProgress: 
 for await (const { text } of engine.generate([{ role: 'user', content: 'Hello' }], { maxNewTokens: 128 })) show(text);
 ```
 
-The first load downloads the GGUF from Hugging Face and copies it into OPFS in the engine's layout. Later loads take
-seconds.
+The first load downloads the GGUF from Hugging Face into OPFS, in the engine's layout. Later loads take seconds.
 
 ## Why
 
