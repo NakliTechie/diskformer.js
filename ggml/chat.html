@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>diskformer · llama.cpp paged</title>
+<style>
+  :root { --bg: #fafaf8; --fg: #1c1c1a; --muted: #6b6b66; --line: #ddddd6; --accent: #2f5d50; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #141413; --fg: #e8e8e3; --muted: #9a9a93; --line: #2e2e2b; --accent: #7fb8a6; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; } p.sub { color: var(--muted); margin: 0 0 20px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
+  label { color: var(--muted); font-size: 13px; }
+  input[type=number] { width: 72px; } textarea { width: 100%; box-sizing: border-box; min-height: 64px; font: inherit; }
+  button { font: inherit; padding: 6px 14px; border: 1px solid var(--accent); background: var(--accent); color: var(--bg); border-radius: 6px; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  #reply { white-space: pre-wrap; border-top: 1px solid var(--line); padding-top: 12px; min-height: 3em; }
+  #status, #log { color: var(--muted); font-size: 13px; } #log { white-space: pre-wrap; max-height: 160px; overflow: auto; font-family: ui-monospace, monospace; font-size: 11px; }
+</style>
+<main>
+  <h1>diskformer · llama.cpp with paged experts</h1>
+  <p class="sub">Pick a MoE GGUF. Expert weights stay in the file; the GPU keeps only <em>slots</em> experts per tensor.</p>
+  <div class="row">
+    <input id="file" type="file" accept=".gguf">
+    <label>slots <input id="slots" type="number" value="32" min="1"></label>
+    <button id="load" disabled>Load</button>
+  </div>
+  <div id="status">No model loaded.</div>
+  <div class="row"><textarea id="prompt">In two sentences, explain why the sky is blue.</textarea></div>
+  <div class="row"><label>max tokens <input id="n" type="number" value="64" min="1"></label><button id="send" disabled>Send</button></div>
+  <div id="reply"></div>
+  <details><summary>log</summary><div id="log"></div></details>
+</main>
+<script type="module">
+  const $ = (id) => document.getElementById(id);
+  const worker = new Worker('./worker.mjs', { type: 'module' });
+  window.dfResult = null;  // last reply + stats, for scripted checks
+  $('file').onchange = () => { $('load').disabled = !$('file').files.length; };
+  $('load').onclick = () => {
+    $('load').disabled = true;
+    $('status').textContent = 'Loading…';
+    worker.postMessage({ type: 'load', file: $('file').files[0], slots: +$('slots').value });
+  };
+  $('send').onclick = () => {
+    $('send').disabled = true;
+    $('reply').textContent = '';
+    worker.postMessage({ type: 'chat', prompt: $('prompt').value, n: +$('n').value });
+  };
+  worker.onmessage = ({ data }) => {
+    if (data.type === 'log') $('log').textContent += data.line + '\n';
+    else if (data.type === 'piece') $('reply').textContent += data.piece;
+    else if (data.type === 'loaded') {
+      $('status').textContent = data.rc === 0 ? `Loaded in ${(data.ms / 1000).toFixed(1)} s.` : `Load failed (code ${data.rc}); see log.`;
+      $('send').disabled = data.rc !== 0;
+      window.dfLoaded = data;
+    } else if (data.type === 'done') {
+      const s = data.stats;
+      $('status').textContent = `${s.decode_tokens} tokens · ${(s.decode_tokens / (s.decode_ms / 1000)).toFixed(2)} tok/s decode · prompt ${s.prompt_tokens} tokens in ${(s.prompt_ms / 1000).toFixed(1)} s`;
+      $('send').disabled = false;
+      window.dfResult = data;
+    } else if (data.type === 'error') {
+      $('status').textContent = 'Error: ' + data.message;
+      window.dfError = data.message;
+    }
+  };
+</script>
+</html>

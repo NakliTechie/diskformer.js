@@ -3,3 +3,4 @@ node_modules/
 /plan
 /site
 .wrangler/
+/ggml/build*/
