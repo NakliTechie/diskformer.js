@@ -48,6 +48,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int df_load(const char * path, int n_slots, int 
     std::setlocale(LC_NUMERIC, "C");
     setenv("GGML_WEBGPU_PAGED_SLOTS", std::to_string(n_slots).c_str(), 1);
     setenv("GGML_WEBGPU_PAGED_FILE", path, 1);
+    setenv("GGML_WEBGPU_PAGED_STATS", "1", 0);
     llama_backend_init();
     ggml_backend_load_all();
 
