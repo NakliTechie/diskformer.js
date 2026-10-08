@@ -25,6 +25,7 @@ endif()
 add_subdirectory(${LLAMA_DIR} llama EXCLUDE_FROM_ALL)
 
 add_executable(df-chat driver.cpp)
+target_include_directories(df-chat PRIVATE ${LLAMA_DIR}/src)  # llama-ext.h: llama_get_memory_breakdown, as common/fit.cpp uses it
 target_link_libraries(df-chat PRIVATE llama-common)
 target_compile_features(df-chat PRIVATE cxx_std_17)
 
@@ -36,7 +37,7 @@ if(EMSCRIPTEN)
         -sMEMORY64=1 -sMODULARIZE -sEXPORT_ES6 -sENVIRONMENT=worker
         -sALLOW_MEMORY_GROWTH -sMAXIMUM_MEMORY=8GB -sSTACK_SIZE=8MB
         -lworkerfs.js --js-library ${CMAKE_CURRENT_SOURCE_DIR}/df_gpu.js
-        "-sEXPORTED_FUNCTIONS=['_df_load','_df_chat','_df_complete','_df_stats','_malloc','_free']"
-        "-sJSPI_EXPORTS=['df_load','df_chat','df_complete']"
+        "-sEXPORTED_FUNCTIONS=['_df_load','_df_plan','_df_chat','_df_complete','_df_stats','_malloc','_free']"
+        "-sJSPI_EXPORTS=['df_plan','df_load','df_chat','df_complete']"
         "-sEXPORTED_RUNTIME_METHODS=['FS','WORKERFS','UTF8ToString','stringToNewUTF8','ENV']")
 endif()

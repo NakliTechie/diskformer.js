@@ -8,11 +8,13 @@
 #include "ggml-webgpu.h"
 #include "gguf.h"
 #include "llama.h"
+#include "llama-ext.h"
 
 #include <algorithm>
 #include <clocale>
 #include <cstdio>
 #include <cstdlib>
+#include <regex>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -164,6 +166,88 @@ static ggml_backend_buffer_type_t df_paged_buft(int n_slots) {
     return make(ggml_backend_reg_dev_get(reg, 0), (uint32_t) n_slots, &src);
 }
 
+static const char * const DF_PAGED = "exps\\.weight";  // tensors paged: the routed experts
+static std::string        g_plan;
+
+// How many expert slots per tensor fit a GPU budget, as JSON: {"budget","dense","kv","compute","reserve","per_slot","n_expert",
+// "n_used","slots"} in bytes, or {"error": ...}. The GPU bill without experts (weights, KV cache, compute buffers) is
+// measured the way llama.cpp's --fit does it: a load that only simulates allocations, experts kept off the GPU. A
+// slot holds one expert of every paged tensor.
+extern "C" EMSCRIPTEN_KEEPALIVE const char * df_plan(const char * path, double budget, int n_ctx) {
+    std::setlocale(LC_NUMERIC, "C");
+    llama_backend_init();
+    ggml_backend_load_all();
+    gguf_init_params gp   = { true, nullptr };
+    gguf_context *   gguf = gguf_init_from_file(path, gp);
+    if (gguf == nullptr) {
+        return (g_plan = "{\"error\":\"cannot read the GGUF\"}").c_str();
+    }
+    const int64_t arch_key = gguf_find_key(gguf, "general.architecture");
+    const std::string arch = arch_key >= 0 ? gguf_get_val_str(gguf, arch_key) : "";
+    const int64_t ne_key   = gguf_find_key(gguf, (arch + ".expert_count").c_str());
+    const int64_t nu_key   = gguf_find_key(gguf, (arch + ".expert_used_count").c_str());
+    const uint32_t n_expert = ne_key >= 0 ? gguf_get_val_u32(gguf, ne_key) : 0;
+    const uint32_t n_used   = nu_key >= 0 ? gguf_get_val_u32(gguf, nu_key) : 0;
+    size_t paged_bytes = 0;
+    const std::regex paged_re(DF_PAGED);
+    for (int64_t i = 0; i < gguf_get_n_tensors(gguf); i++) {
+        if (std::regex_search(gguf_get_tensor_name(gguf, i), paged_re)) {
+            paged_bytes += gguf_get_tensor_size(gguf, i);
+        }
+    }
+    gguf_free(gguf);
+    if (n_expert == 0 || paged_bytes == 0) {
+        return (g_plan = "{\"error\":\"not a mixture-of-experts GGUF\"}").c_str();
+    }
+
+    static llama_model_tensor_buft_override cpu[] = { { DF_PAGED, nullptr }, { nullptr, nullptr } };
+    cpu[0].buft = ggml_backend_dev_buffer_type(ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU));
+    llama_model_params mp    = llama_model_default_params();
+    mp.n_gpu_layers          = 999;
+    mp.tensor_buft_overrides = cpu;
+    mp.no_alloc              = true;
+    mp.use_extra_bufts       = false;
+    mp.load_mode             = LLAMA_LOAD_MODE_NONE;
+    llama_model * model      = llama_model_load_from_file(path, mp);
+    if (model == nullptr) {
+        return (g_plan = "{\"error\":\"cannot load the model\"}").c_str();
+    }
+    llama_context_params cp = llama_context_default_params();
+    cp.n_ctx                = n_ctx;
+    cp.n_batch              = 512;
+    llama_context * ctx     = llama_init_from_model(model, cp);
+    if (ctx == nullptr) {
+        llama_model_free(model);
+        return (g_plan = "{\"error\":\"cannot create a context\"}").c_str();
+    }
+    size_t dense = 0, kv = 0, compute = 0;
+    for (const auto & [buft, mb] : llama_get_memory_breakdown(ctx)) {
+        ggml_backend_dev_t dev = ggml_backend_buft_get_device(buft);
+        const auto         type = dev ? ggml_backend_dev_type(dev) : GGML_BACKEND_DEVICE_TYPE_CPU;
+        if (type == GGML_BACKEND_DEVICE_TYPE_GPU || type == GGML_BACKEND_DEVICE_TYPE_IGPU) {
+            dense += mb.model;
+            kv += mb.context;
+            compute += mb.compute;
+        }
+    }
+    llama_free(ctx);
+    llama_model_free(model);
+
+    const size_t per_slot = paged_bytes / n_expert;
+    // reserve: the real load's compute buffer measured 5.5 MiB above this simulation (Gemma 4 26B-A4B, experts paged
+    // vs on the CPU), plus the backend's slot maps and parameter buffers
+    const size_t reserve  = 32u << 20;
+    const double room     = budget - (double) (dense + kv + compute + reserve);
+    const long   slots    = room > 0 ? std::min<long>((long) (room / per_slot), n_expert) : 0;
+    char         buf[512];
+    snprintf(buf, sizeof(buf),
+             "{\"budget\":%.0f,\"dense\":%zu,\"kv\":%zu,\"compute\":%zu,\"reserve\":%zu,\"per_slot\":%zu,\"n_expert\":%u,"
+             "\"n_used\":%u,\"slots\":%ld%s}",
+             budget, dense, kv, compute, reserve, per_slot, n_expert, n_used, slots,
+             slots < (long) n_used ? ",\"error\":\"the budget does not hold the dense part and one token's experts\"" : "");
+    return (g_plan = buf).c_str();
+}
+
 // Loads `path`; experts keep `n_slots` per tensor on the GPU and are read back from the same file. 0 on success.
 extern "C" EMSCRIPTEN_KEEPALIVE int df_load(const char * path, int n_slots, int n_ctx) {
     std::setlocale(LC_NUMERIC, "C");
@@ -179,7 +263,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int df_load(const char * path, int n_slots, int 
         fprintf(stderr, "df_load: no WebGPU_Paged buffer type (is this the webgpu-disk-tier build?)\n");
         return 1;
     }
-    static llama_model_tensor_buft_override overrides[] = { { "exps\\.weight", nullptr }, { nullptr, nullptr } };
+    static llama_model_tensor_buft_override overrides[] = { { DF_PAGED, nullptr }, { nullptr, nullptr } };
     overrides[0].buft = paged;
 
     llama_model_params mp     = llama_model_default_params();
@@ -305,10 +389,21 @@ static std::string df_expected(const std::string & prompt, const std::string & c
 // df-chat <model.gguf> <n_slots> --gate <refs.json>   replay llama.cpp's replies; exit 1 on any difference
 int main(int argc, char ** argv) {
     if (argc < 4) {
-        fprintf(stderr, "usage: %s model.gguf n_slots (prompt [n_predict] | --gate refs.json)\n", argv[0]);
+        fprintf(stderr, "usage: %s model.gguf (n_slots | <GB>G) (prompt [n_predict] | --gate refs.json)\n", argv[0]);
         return 1;
     }
-    if (int rc = df_load(argv[1], atoi(argv[2]), 1024)) {
+    // n_slots, or a GPU budget in GB ("2.5G") that df_plan turns into slots
+    int               n_slots = atoi(argv[2]);
+    const std::string slots_arg = argv[2];
+    if (!slots_arg.empty() && slots_arg.back() == 'G') {
+        nlohmann::json plan = nlohmann::json::parse(df_plan(argv[1], atof(argv[2]) * 1e9, 1024));
+        fprintf(stderr, "df_plan: %s\n", plan.dump().c_str());
+        if (plan.contains("error")) {
+            return 1;
+        }
+        n_slots = plan["slots"];
+    }
+    if (int rc = df_load(argv[1], n_slots, 1024)) {
         return rc;
     }
     if (std::string(argv[3]) != "--gate") {

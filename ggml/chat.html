@@ -19,10 +19,10 @@
 </style>
 <main>
   <h1>diskformer · llama.cpp with paged experts</h1>
-  <p class="sub">Pick a MoE GGUF. Expert weights stay in the file; the GPU keeps only <em>slots</em> experts per tensor.</p>
+  <p class="sub">Pick a MoE GGUF and a GPU memory budget. Expert weights stay in the file; the budget left after the dense weights, KV cache and compute buffers holds expert slots.</p>
   <div class="row">
     <input id="file" type="file" accept=".gguf">
-    <label>slots <input id="slots" type="number" value="32" min="1"></label>
+    <label>GPU budget, GB <input id="budget" type="number" value="4" min="1" step="0.5"></label>
     <button id="load" disabled>Load</button>
   </div>
   <div id="status">No model loaded.</div>
@@ -33,13 +33,14 @@
 </main>
 <script type="module">
   const $ = (id) => document.getElementById(id);
-  const worker = new Worker('./worker.mjs', { type: 'module' });
+  const worker = new Worker(`./worker.mjs?${Date.now()}`, { type: 'module' });
+  const gb = (b) => (b / 1e9).toFixed(2);
   window.dfResult = null;  // last reply + stats, for scripted checks
   $('file').onchange = () => { $('load').disabled = !$('file').files.length; };
   $('load').onclick = () => {
     $('load').disabled = true;
     $('status').textContent = 'Loading…';
-    worker.postMessage({ type: 'load', file: $('file').files[0], slots: +$('slots').value });
+    worker.postMessage({ type: 'load', file: $('file').files[0], budget: +$('budget').value * 1e9 });
   };
   $('send').onclick = () => {
     $('send').disabled = true;
@@ -50,8 +51,14 @@
     if (data.type === 'log') $('log').textContent += data.line + '\n';
     else if (data.type === 'progress') $('status').textContent = `Copying into browser storage… ${(data.copied / 1e9).toFixed(1)} of ${(data.total / 1e9).toFixed(1)} GB`;
     else if (data.type === 'piece') $('reply').textContent += data.piece;
-    else if (data.type === 'loaded') {
-      $('status').textContent = data.rc === 0 ? `Loaded in ${(data.ms / 1000).toFixed(1)} s.` : `Load failed (code ${data.rc}); see log.`;
+    else if (data.type === 'plan') {
+      const p = data.plan;
+      $('status').textContent = p.error
+        ? `Budget too small: dense ${gb(p.dense)} + KV ${gb(p.kv)} + compute ${gb(p.compute)} GB leave room for ${p.slots} expert slots of ${gb(p.per_slot)} GB; one token routes to ${p.n_used}.`
+        : `Planning… ${p.slots} expert slots of ${gb(p.per_slot)} GB each.`;
+    } else if (data.type === 'loaded') {
+      const p = data.plan, bill = p ? ` GPU bill: dense ${gb(p.dense)} + KV ${gb(p.kv)} + compute ${gb(p.compute)} + ${data.slots} slots × ${gb(p.per_slot)} GB.` : '';
+      $('status').textContent = data.rc === 0 ? `Loaded in ${(data.ms / 1000).toFixed(1)} s.${bill}` : `Load failed (code ${data.rc}); see log.`;
       $('send').disabled = data.rc !== 0;
       window.dfLoaded = data;
     } else if (data.type === 'done') {

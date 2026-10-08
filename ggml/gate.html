@@ -29,13 +29,14 @@
       else if (data.type === 'loaded' || data.type === 'done') resolve(data);
     };
   });
-  out.textContent = `model ${q.get('model')} · slots ${q.get('slots')}`;
+  out.textContent = `model ${q.get('model')} · ${q.get('budget') ? `budget ${q.get('budget')} GB` : `slots ${q.get('slots')}`}`;
   // env=NAME=value,NAME=value: settings for llama.cpp / ggml-webgpu
   const env = Object.fromEntries((q.get('env') || '').split(',').filter(Boolean).map((kv) => kv.split('=')));
   out.textContent += env && Object.keys(env).length ? ` · ${q.get('env')}` : '';
-  worker.postMessage({ type: 'load', opfsName: q.get('model'), slots: +q.get('slots'), env });
+  // budget=<GB> plans the slots from a GPU budget; slots=<n> sets them directly
+  worker.postMessage({ type: 'load', opfsName: q.get('model'), slots: +q.get('slots'), budget: q.get('budget') ? +q.get('budget') * 1e9 : 0, env });
   const loaded = await next();
-  say(`loaded in ${(loaded.ms / 1000).toFixed(1)} s (rc ${loaded.rc})`);
+  say(`loaded in ${(loaded.ms / 1000).toFixed(1)} s (rc ${loaded.rc}), ${loaded.slots} slots`);
   const results = [];
   const only = q.get('only');
   for (const c of refs.conversations.filter((c) => !only || only.split(',').includes(c.name))) {

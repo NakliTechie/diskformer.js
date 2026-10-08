@@ -66,8 +66,16 @@ onmessage = async ({ data }) => {
       mod.FS.mkdir('/m');
       mod.FS.mount(mod.WORKERFS, { files: [file] }, '/m');
       const t0 = performance.now();
-      const rc = await mod._df_load(str('/m/' + file.name), data.slots, data.ctx ?? 1024);
-      post('loaded', { rc, ms: Math.round(performance.now() - t0) });
+      // a GPU budget (bytes) becomes slots through df_plan; else data.slots as given
+      let slots = data.slots, plan = null;
+      if (data.budget) {
+        plan = JSON.parse(text(await mod._df_plan(str('/m/' + file.name), data.budget, data.ctx ?? 1024)));
+        post('plan', { plan });
+        if (plan.error) throw new Error(`budget ${(data.budget / 1e9).toFixed(1)} GB: ${plan.error}`);
+        slots = plan.slots;
+      }
+      const rc = await mod._df_load(str('/m/' + file.name), slots, data.ctx ?? 1024);
+      post('loaded', { rc, slots, plan, ms: Math.round(performance.now() - t0) });
     } else if (data.type === 'complete') {
       const reply = await mod._df_complete(str(data.prompt), data.n ?? 64);
       post('done', { id: data.id, text: text(reply), stats: JSON.parse(text(mod._df_stats())) });
