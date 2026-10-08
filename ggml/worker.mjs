@@ -59,7 +59,7 @@ onmessage = async ({ data }) => {
         // read-only, so the reader workers can open the same file
         mod.ggufHandle = await fh.createSyncAccessHandle({ mode: 'read-only' });
         // expert reads in parallel, off this thread (DF_READERS=0: on this thread's handle)
-        const n = +((data.env || {}).DF_READERS ?? 4);
+        const n = +((data.env || {}).DF_READERS ?? 8);  // 8: measured 10.66 tok/s vs 9.72 at 4, 10.57 at 16
         if (n > 0) mod.ggufReaders = await OpfsReaderPool.open(`gguf/${file.name}`, { workers: n });
       }
       mod.ggufFile = file;
