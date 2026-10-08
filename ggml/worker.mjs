@@ -2,6 +2,7 @@
 // disk); llama.cpp loads it through a WORKERFS mount of that file, and experts are read on demand through an OPFS sync
 // access handle, straight into the wasm heap. With opfs: false the picked File is read in place instead (slower).
 import createModule from './build-wasm/df-chat.mjs';
+import { OpfsReaderPool } from '../src/opfs-reader.js';
 
 let mod;
 const post = (type, data) => postMessage({ type, ...data });
@@ -45,16 +46,21 @@ onmessage = async ({ data }) => {
         preRun: [(m) => Object.assign(m.ENV, data.env || {})],
       });
       let file = data.file;
+      let fh = null;
       if (!file) {
         // a GGUF already in OPFS, by name
         const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle('gguf');
-        const fh = await dir.getFileHandle(data.opfsName);
-        file = await fh.getFile();
-        mod.ggufHandle = await fh.createSyncAccessHandle();
+        fh = await dir.getFileHandle(data.opfsName);
       } else if (data.opfs !== false) {
-        const fh = await opfsCopy(data.file);
+        fh = await opfsCopy(data.file);
+      }
+      if (fh) {
         file = await fh.getFile();
-        mod.ggufHandle = await fh.createSyncAccessHandle();
+        // read-only, so the reader workers can open the same file
+        mod.ggufHandle = await fh.createSyncAccessHandle({ mode: 'read-only' });
+        // expert reads in parallel, off this thread (DF_READERS=0: on this thread's handle)
+        const n = +((data.env || {}).DF_READERS ?? 4);
+        if (n > 0) mod.ggufReaders = await OpfsReaderPool.open(`gguf/${file.name}`, { workers: n });
       }
       mod.ggufFile = file;
       mod.FS.mkdir('/m');
