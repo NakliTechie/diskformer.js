@@ -2,7 +2,7 @@
 // sends the 9 gate conversations greedily, and writes prompt + reply per conversation, as in examples/chat/refs/.
 //
 //   node scripts/record-refs.mjs <model.gguf> <out.json> [--port 8799] [--ctx 4096]
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
@@ -41,7 +41,9 @@ try {
     if (i > 600) throw new Error('llama-server did not become healthy in 10 minutes');
     await new Promise((r) => setTimeout(r, 1000));
   }
-  const version = (log.match(/build: (\d+) \(([0-9a-f]+)\)/) || []).slice(1).join(' ');
+  const ver = spawnSync('llama-server', ['--version'], { encoding: 'utf8' });  // prints on stderr
+  const v = `${ver.stdout}${ver.stderr}`.match(/version: (\d+) \(([0-9a-f]+)\)/);
+  const version = v ? `b${v[1]} (${v[2]})` : '';
   const result = [];
   for (const c of conversations) {
     const { prompt } = await post('/apply-template', { messages: c.messages });
