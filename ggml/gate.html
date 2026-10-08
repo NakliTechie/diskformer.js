@@ -20,7 +20,7 @@
     return content;
   };
   const refs = await (await fetch(q.get('refs'))).json();
-  const worker = new Worker('./worker.mjs', { type: 'module' });
+  const worker = new Worker(`./worker.mjs?${Date.now()}`, { type: 'module' });
   window.gateLog = [];
   const next = () => new Promise((resolve, reject) => {
     worker.onmessage = ({ data }) => {
@@ -30,7 +30,10 @@
     };
   });
   out.textContent = `model ${q.get('model')} · slots ${q.get('slots')}`;
-  worker.postMessage({ type: 'load', opfsName: q.get('model'), slots: +q.get('slots') });
+  // env=NAME=value,NAME=value: settings for llama.cpp / ggml-webgpu
+  const env = Object.fromEntries((q.get('env') || '').split(',').filter(Boolean).map((kv) => kv.split('=')));
+  out.textContent += env && Object.keys(env).length ? ` · ${q.get('env')}` : '';
+  worker.postMessage({ type: 'load', opfsName: q.get('model'), slots: +q.get('slots'), env });
   const loaded = await next();
   say(`loaded in ${(loaded.ms / 1000).toFixed(1)} s (rc ${loaded.rc})`);
   const results = [];

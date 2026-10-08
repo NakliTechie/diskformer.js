@@ -41,6 +41,8 @@ onmessage = async ({ data }) => {
         print: (line) => post('log', { line }),
         printErr: (line) => post('log', { line }),
         onPiece: (piece) => post('piece', { piece }),
+        // settings for llama.cpp / ggml-webgpu, e.g. { LLAMA_MOE_LOOKAHEAD: '2' }
+        preRun: [(m) => Object.assign(m.ENV, data.env || {})],
       });
       let file = data.file;
       if (!file) {

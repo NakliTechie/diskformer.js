@@ -38,5 +38,5 @@ if(EMSCRIPTEN)
         -lworkerfs.js --js-library ${CMAKE_CURRENT_SOURCE_DIR}/df_gpu.js
         "-sEXPORTED_FUNCTIONS=['_df_load','_df_chat','_df_complete','_df_stats','_malloc','_free']"
         "-sJSPI_EXPORTS=['df_load','df_chat','df_complete']"
-        "-sEXPORTED_RUNTIME_METHODS=['FS','WORKERFS','UTF8ToString','stringToNewUTF8']")
+        "-sEXPORTED_RUNTIME_METHODS=['FS','WORKERFS','UTF8ToString','stringToNewUTF8','ENV']")
 endif()
