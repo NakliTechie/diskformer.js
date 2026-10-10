@@ -4,3 +4,6 @@ node_modules/
 /site
 .wrangler/
 /ggml/build*/
+# Promo output (regenerable; /windup-nt sweeps it)
+/marketing
+/brag-output*
