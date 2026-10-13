@@ -43,8 +43,9 @@ async function opfsCopy(file) {
 
 // A GGUF from a URL into OPFS as <name>.part, in 64 MiB chunks over STREAMS parallel Range requests (one stream from
 // Hugging Face gave ~6 MB/s here, eight gave ~25), renamed to <name> once every chunk is written. <name>.part.json
-// lists the finished chunks, so a stopped download resumes without gaps; a .part without that list (an older,
-// sequential download) counts its whole chunks from the start as finished.
+// lists the finished chunks, so a stopped download resumes without gaps. A chunk counts as finished only after its
+// bytes are flushed. A .part with no usable list starts over: with parallel streams its length is the furthest
+// write, not the finished bytes (a reload before the first chunk finished once left 5 chunks half written).
 const CHUNK = 64 << 20, STREAMS = 6;
 let downloading = null;
 async function download({ url, name, size }) {
@@ -62,8 +63,7 @@ async function download({ url, name, size }) {
     const j = JSON.parse(new TextDecoder().decode(buf) || 'null');
     if (j && j.size === size && j.chunk === CHUNK) finished = new Set(j.done);
   } catch {}
-  if (!finished.size) for (let i = 0; i < Math.floor(Math.min(handle.getSize(), size) / CHUNK); i++) finished.add(i);
-  if (handle.getSize() > size) { handle.truncate(0); finished.clear(); }
+  if (!finished.size || handle.getSize() > size) { handle.truncate(0); finished.clear(); }
   const save = () => {
     const b = new TextEncoder().encode(JSON.stringify({ size, chunk: CHUNK, done: [...finished] }));
     side.truncate(0); side.write(b, { at: 0 }); side.flush();
@@ -92,7 +92,7 @@ async function download({ url, name, size }) {
             if (now - last > 500) { last = now; post('progress', { name, copied: got, total: size, rate: (got - start) / ((now - t0) / 1000) }); }
           }
           if (wrote !== chunkLen(i)) throw new Error(`download: chunk ${i} ended at ${wrote} of ${chunkLen(i)} bytes`);
-          finished.add(i); save();
+          handle.flush(); finished.add(i); save();
           break;
         } catch (e) {
           got -= wrote;
