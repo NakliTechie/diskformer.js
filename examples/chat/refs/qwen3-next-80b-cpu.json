@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp b9830 (c1a1c8ee9), CPU, -ngl 0: llama-server /v1/chat/completions, temperature 0, max_tokens 64, on Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf (sha256 d103b2733ec1012a52d01edda66b7e5c24ae50508c9f99f5297ea459ef3c061a). Recorded 2026-10-13 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<|im_start|>user\nExplain the difference between TCP and UDP to a new programmer.<|im_end|>\n<|im_start|>assistant\n",
+   "content": "Absolutely! Let’s break down the difference between **TCP** and **UDP** in a simple, beginner-friendly way — imagine you’re sending a letter, but there are two ways to do it.\n\n---\n\n### 📬 TCP: The Reliable Mail Service (Like Certified Mail)\n\nThink of **TCP (Transmission Control Protocol",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<|im_start|>user\nExtract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<|im_end|>\n<|im_start|>assistant\n",
+   "content": "{\n  \"name\": \"Priya\",\n  \"city\": \"Pune\",\n  \"age\": 34\n}",
+   "finish": "stop",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<|im_start|>user\nTranslate into Hindi: \"The library opens at nine and closes at six.\"<|im_end|>\n<|im_start|>assistant\n",
+   "content": "पुस्तकालय नौ बजे खुलता है और छह बजे बंद हो जाता है।",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<|im_start|>user\nA train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<|im_end|>\n<|im_start|>assistant\n",
+   "content": "To find the duration of the journey, subtract the departure time from the arrival time:\n\n**Departure:** 14:10  \n**Arrival:** 17:45  \n\n### Step 1: Subtract the hours  \n17 - 14 = **3 hours**\n\n### Step 2:",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<|im_start|>user\nWrite a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<|im_end|>\n<|im_start|>assistant\n",
+   "content": "To find the five customers with the highest total order value, we need to:\n\n1. Join the `customers` table with the `orders` table on `customers.id = orders.customer_id`.\n2. Group the results by customer to calculate the total order value per customer.\n3. Order the results by the total order",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<|im_start|>user\nList five major rivers of Africa, one per line, with the country where each reaches the sea.<|im_end|>\n<|im_start|>assistant\n",
+   "content": "Nile – Egypt  \nCongo – Democratic Republic of the Congo  \nNiger – Nigeria  \nZambezi – Mozambique  \nOrange –",
+   "finish": "length",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<|im_start|>user\nWhat do these emoji usually mean in a text message: 🙏 🔥 💀 ?<|im_end|>\n<|im_start|>assistant\n",
+   "content": "The emoji sequence 🙏 🔥 💀 is commonly used in casual text messages (especially among younger users on platforms like Instagram, Snapchat, or TikTok) to express a mix of admiration, intensity, and humor. Here’s what each typically means—and how they work together:\n\n### 🙏 — “Please",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<|im_start|>user\nWrite a haiku about autumn leaves in a city.<|im_end|>\n<|im_start|>assistant\n",
+   "content": "Crimson leaves descend  \non concrete sidewalks—wind  \nwhispers through city streets.",
+   "finish": "stop",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<|im_start|>system\nAnswer like a cheerful pirate, in two sentences.<|im_end|>\n<|im_start|>user\nWhat is the boiling point of water at sea level?<|im_end|>\n<|im_start|>assistant\n",
+   "content": "Ahoy, matey! The boiling point o’ water at sea level is a scorchin’ 100 degrees Celsius—perfect for brewin’ a pot o’ tea or boilin",
+   "finish": "length",
+   "tokens": 41
+  }
+ ]
+}
