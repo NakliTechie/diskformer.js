@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-10-13)
+- Changed: errors are now `DiskformerError`s with a `code` (see below). A caller that checked `e.name === 'AbortError'`
+  after an aborted ingest should check `isDiskformerError(e, 'LOAD_ABORTED')`; messages are unchanged.
 - Coded errors (`src/errors.js`): `DiskformerError` with a `code`, checked by name and code through
   `isDiskformerError(e, code)`. `ingestGguf` throws `LOAD_ABORTED` when its signal aborted, else `LOAD_FAILED` with the
   original as `cause`.
@@ -13,6 +15,10 @@
   ingested again instead of loaded.
 - Gates that run from this repo: `test/browser/greedy.html` (token by token vs llama.cpp, references in `test/refs/`),
   `test/browser/states.html` + `test/state-check.py` (per-layer states vs LocalMind's numpy pass).
+- New helpers: `opfsFileSize(path)`, `opfsSubdirs(path)`.
+- Not in the npm package, but new in the repo: the demo at diskformer.naklitechie.com now runs llama.cpp's WebGPU
+  backend with experts paged from OPFS (`ggml/`; LFM2 8B-A1B, OLMoE 1B-7B, Qwen3 30B-A3B, Qwen3-Next 80B-A3B); the
+  hand-engine page moved to `/classic/`.
 
 ## 0.3.0 (2026-10-07)
 - `fileFetch(blob)`: ingest a GGUF that is already on disk (a `File` the user picked, e.g. from a Hugging Face or
