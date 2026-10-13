@@ -17,19 +17,27 @@ Plain ES modules, no dependencies, no build step. Chromium with WebGPU. Weights 
 | How | Command |
 |---|---|
 | npm | `npm install diskformer` |
-| CDN | `import { Gemma4MoeSsd } from 'https://cdn.jsdelivr.net/npm/diskformer@0.3/engines/gemma4_moe_ssd.js'` |
+| CDN | `import { Gemma4MoeSsd } from 'https://cdn.jsdelivr.net/npm/diskformer@0.4/engines/gemma4_moe_ssd.js'` |
 | Copy | `src/`, `engines/` and `index.js`; nothing else is needed |
 
-## Try it: a 14.4 GB model in 2.5 GB of GPU memory
+## Try it: an 80B model (48 GB file) in under 5 GB of GPU memory
 
-[diskformer.naklitechie.com](https://diskformer.naklitechie.com/) (also a [Hugging Face Space](https://huggingface.co/spaces/naklitechie/diskformer-chat)) runs llama.cpp's WebGPU backend with paged experts: LFM2 8B-A1B, OLMoE, Qwen3 30B-A3B, Qwen3-Next 80B (source in `ggml/`; references in `examples/chat/refs/`).
-The hand-written engines measured below are at [/classic/](https://diskformer.naklitechie.com/classic/); serve `examples/chat` to run them locally. Each page downloads a model once into OPFS, resumably.
+https://github.com/user-attachments/assets/ffda17ae-f3cd-4fdf-a9b6-ea879438433c
 
-```bash
-python3 -m http.server 8000      # then open http://localhost:8000/examples/chat/
-```
+[diskformer.naklitechie.com](https://diskformer.naklitechie.com/) (also a [Hugging Face Space](https://huggingface.co/spaces/naklitechie/diskformer-chat))
+runs llama.cpp's WebGPU backend with the experts paged in from OPFS (source in `ggml/`). Pick a model; it downloads
+once. Measured in Chrome on a MacBook Pro M4 Pro, 24 GB, 2026-10-13 (the recording above):
 
-Measured on a MacBook M4 Pro with 24 GB, Chrome 154, on 2026-10-05:
+| Model (GGUF) | On disk | GPU memory | Decode | Paged vs unpaged replies |
+|---|---|---|---|---|
+| Qwen3-Next 80B-A3B, Q4_K_M | 48.4 GB | 4.89 GB | 2.9 tok/s, 359 MB read per token | 9/9 identical (16 vs 64 slots) |
+| OLMoE 1B-7B, Q4_K_M | 4.21 GB | 3.92 GB | 22.4 tok/s | 9/9 identical |
+| LFM2 8B-A1B, Q4_K_M | 5.04 GB | 3.89 GB | 17.1 tok/s | 9/9 identical |
+
+Qwen3 30B-A3B runs too. References: `examples/chat/refs/`. The two hand-written engines below run at
+[/classic/](https://diskformer.naklitechie.com/classic/), or locally with `python3 -m http.server` and `examples/chat/`.
+
+The hand-written engines, measured on a MacBook M4 Pro with 24 GB, Chrome 154, on 2026-10-05:
 
 | Model | On disk | GPU budget | GPU memory used | Decode | Output |
 |---|---|---|---|---|---|
@@ -38,14 +46,11 @@ Measured on a MacBook M4 Pro with 24 GB, Chrome 154, on 2026-10-05:
 | Gemma 4 26B-A4B, QAT Q4_0 | 14.4 GB | 7 GB | 6.63 GB | 17.9 tok/s | 9/9 |
 | Qwen3.6 35B-A3B, Q8_0 | 36.9 GB | 4 GB | 3.52 GB | 9.2 tok/s | not compared |
 
-"Identical" means the reply text matches llama.cpp b9830's Metal path character for character on the same GGUF. The
-gate first drops the empty thought-channel marker llama-server echoes before each Gemma reply. 9 conversations,
-greedy, up to 64 tokens each. Qwen3.6 is not compared: llama.cpp's Metal path cannot hold 36.9 GB here.
+"Identical": the reply matches llama.cpp b9830 Metal character for character on the same GGUF (9 conversations, greedy,
+64 tokens; Qwen3.6 does not fit Metal here). Each row is `node examples/run-demo.mjs chat --budget <GB>`, decode the
+median. Only Apple silicon is tested; discrete GPUs and 8–16 GB machines are not.
 
-Each row is `node examples/run-demo.mjs chat --budget <GB>`; decode is the median over the 9 replies. A larger budget
-caches more experts. Only Apple silicon is tested; discrete GPUs and 8–16 GB machines are not.
-
-In your own page:
+In your own page (the first load downloads the GGUF into OPFS in the engine's layout; later loads take seconds):
 
 ```js
 import { Gemma4MoeSsd } from 'diskformer/engines/gemma4_moe_ssd.js';
@@ -53,8 +58,6 @@ import { Gemma4MoeSsd } from 'diskformer/engines/gemma4_moe_ssd.js';
 const engine = await Gemma4MoeSsd.load(null, { gpuBudgetBytes: 3e9, onProgress: console.log });
 for await (const { text } of engine.generate([{ role: 'user', content: 'Hello' }], { maxNewTokens: 128 })) show(text);
 ```
-
-The first load downloads the GGUF from Hugging Face into OPFS, in the engine's layout. Later loads take seconds.
 
 ## Why
 
@@ -102,7 +105,6 @@ node examples/run-demo.mjs rows              # headless Chrome: a 64 MB table on
 node examples/run-demo.mjs embedding         # lookup → slots → a WGSL gather kernel, every output value checked
 node examples/run-demo.mjs chat --budget 2.5 # downloads Gemma once (14.4 GB) to a fixed profile, replays 9 llama.cpp replies, fails on any difference
 node examples/run-demo.mjs test/browser/ingest-resume.html --models <dir> --file <gguf>   # abort, resume, compare bytes
-node examples/run-demo.mjs test/browser/server.html --models <dir> --file <any file>   # the runner's file server rejects bad requests
 node examples/run-demo.mjs test/browser/greedy.html --models <dir> --file <gguf> --ref test/refs/<ref>.json   # token by token vs llama.cpp
 node examples/run-demo.mjs test/browser/states.html --models <dir> --file g4-6l.gguf   # per-layer states; then test/state-check.py
 npm run sync                                 # the files shared with LocalMind match their sources
@@ -111,10 +113,7 @@ npm run sync                                 # the files shared with LocalMind m
 The chat gate replays `examples/chat/refs/gemma.json` (llama.cpp's replies) under a GPU budget; any differing reply
 exits 1. `--models <dir>` serves a local GGUF; `--site <url>` gates a deployed copy, such as the Space.
 
-The code runs in [LocalMind](https://github.com/NakliTechie/LocalMind); `src/` and `engines/` are its copies.
-
 ## License
 
-MIT. `engines/` contains kernels ported from Apache-2.0 code: see `engines/NOTICE`. Model weights are not
-distributed; each model is downloaded under its own terms. Pointers:
-[LocalMind](https://github.com/NakliTechie/LocalMind) · `CHANGELOG.md`.
+MIT. `engines/` contains kernels ported from Apache-2.0 code: see `engines/NOTICE`. Model weights are not distributed;
+each model downloads under its own terms. The code runs in [LocalMind](https://github.com/NakliTechie/LocalMind) (`src/` and `engines/` are its copies) · `CHANGELOG.md`.
