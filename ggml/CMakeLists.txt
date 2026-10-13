@@ -37,7 +37,11 @@ if(EMSCRIPTEN)
         -sMEMORY64=1 -sMODULARIZE -sEXPORT_ES6 -sENVIRONMENT=worker
         -sALLOW_MEMORY_GROWTH -sMAXIMUM_MEMORY=8GB -sSTACK_SIZE=8MB
         -lworkerfs.js --js-library ${CMAKE_CURRENT_SOURCE_DIR}/df_gpu.js
-        "-sEXPORTED_FUNCTIONS=['_df_load','_df_plan','_df_chat','_df_complete','_df_stats','_malloc','_free']"
-        "-sJSPI_EXPORTS=['df_plan','df_load','df_chat','df_complete']"
+        "-sEXPORTED_FUNCTIONS=['_df_load','_df_plan','_df_chat','_df_chat_messages','_df_complete','_df_abort','_df_stats','_malloc','_free']"
+        "-sJSPI_EXPORTS=['df_plan','df_load','df_chat','df_chat_messages','df_complete']"
         "-sEXPORTED_RUNTIME_METHODS=['FS','WORKERFS','UTF8ToString','stringToNewUTF8','ENV']")
+    # ggml/dist/ is committed: the site and the HF Space serve it, and their CI has no Emscripten
+    add_custom_command(TARGET df-chat POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE_DIR:df-chat>/df-chat.mjs $<TARGET_FILE_DIR:df-chat>/df-chat.wasm
+                ${CMAKE_CURRENT_SOURCE_DIR}/dist/)
 endif()

@@ -1,75 +1,295 @@
 <!doctype html>
 <html lang="en">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>diskformer · llama.cpp paged</title>
+<title>diskformer chat</title>
+<meta name="description" content="Run a mixture-of-experts model larger than your GPU memory in a browser tab: llama.cpp's WebGPU backend with the experts paged in from the browser's on-disk storage (OPFS) by diskformer.js.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="diskformer.js">
+<meta property="og:title" content="diskformer chat: models larger than your GPU, in a browser tab">
+<meta property="og:description" content="llama.cpp on WebGPU; the experts stay on disk and stream in as each token needs them.">
+<meta property="og:url" content="https://diskformer.naklitechie.com/">
+<meta property="og:image" content="https://diskformer.naklitechie.com/social.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://diskformer.naklitechie.com/social.png">
 <style>
-  :root { --bg: #fafaf8; --fg: #1c1c1a; --muted: #6b6b66; --line: #ddddd6; --accent: #2f5d50; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #141413; --fg: #e8e8e3; --muted: #9a9a93; --line: #2e2e2b; --accent: #7fb8a6; } }
-  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
-  main { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
-  h1 { font-size: 18px; margin: 0 0 4px; } p.sub { color: var(--muted); margin: 0 0 20px; }
-  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 10px 0; }
-  label { color: var(--muted); font-size: 13px; }
-  input[type=number] { width: 72px; } textarea { width: 100%; box-sizing: border-box; min-height: 64px; font: inherit; }
-  button { font: inherit; padding: 6px 14px; border: 1px solid var(--accent); background: var(--accent); color: var(--bg); border-radius: 6px; cursor: pointer; }
+  :root { --bg: #fafaf9; --fg: #1c1917; --muted: #78716c; --line: #e7e5e4; --card: #fff; --accent: #2563eb; --bad: #b91c1c; --code: #f5f5f4; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #161514; --fg: #e7e5e4; --muted: #a8a29e; --line: #2e2b29; --card: #1f1d1b; --accent: #60a5fa; --bad: #f87171; --code: #262321; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; }
+  main { max-width: 820px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  p { margin: 0 0 12px; }
+  a { color: var(--accent); }
+  .muted { color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 14px 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  select, input, textarea, button { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; }
+  input[type=number] { width: 90px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   button:disabled { opacity: .5; cursor: default; }
-  #reply { white-space: pre-wrap; border-top: 1px solid var(--line); padding-top: 12px; min-height: 3em; }
-  #status, #log { color: var(--muted); font-size: 13px; } #log { white-space: pre-wrap; max-height: 160px; overflow: auto; font-family: ui-monospace, monospace; font-size: 11px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  td { padding: 7px 6px; border-top: 1px solid var(--line); vertical-align: middle; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.act { text-align: right; white-space: nowrap; }
+  td.act button { margin-left: 6px; }
+  .tag { font-size: 12px; color: var(--muted); }
+  .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 10px 0 6px; }
+  .bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  #status.bad { color: var(--bad); }
+  .meter { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .meter div { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .meter b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+  .meter span { font-size: 12px; color: var(--muted); }
+  #log { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+  .msg { overflow-wrap: anywhere; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--line); }
+  .msg.user { align-self: flex-end; background: var(--bg); max-width: 85%; white-space: pre-wrap; }
+  .msg.model { background: var(--card); }
+  .msg.model p { margin: 0 0 8px; } .msg.model p:last-child { margin: 0; }
+  .msg code { background: var(--code); border-radius: 4px; padding: 1px 4px; font-size: 13px; }
+  .msg pre { background: var(--code); border-radius: 6px; padding: 8px 10px; overflow-x: auto; margin: 0 0 8px; }
+  .msg pre code { background: none; padding: 0; }
+  .msg .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  form { display: flex; gap: 8px; align-items: end; }
+  textarea { flex: 1; resize: vertical; min-height: 44px; }
+  details { font-size: 12px; color: var(--muted); } #devlog { white-space: pre-wrap; max-height: 200px; overflow: auto; font-family: ui-monospace, monospace; }
+  footer { font-size: 12px; color: var(--muted); margin-top: 24px; }
 </style>
+</head>
+<body>
 <main>
-  <h1>diskformer · llama.cpp with paged experts</h1>
-  <p class="sub">Pick a MoE GGUF and a GPU memory budget. Expert weights stay in the file; the budget left after the dense weights, KV cache and compute buffers holds expert slots.</p>
-  <div class="row">
-    <input id="file" type="file" accept=".gguf">
-    <label>GPU budget, GB <input id="budget" type="number" value="4" min="1" step="0.5"></label>
-    <button id="load" disabled>Load</button>
-  </div>
-  <div id="status">No model loaded.</div>
-  <div class="row"><textarea id="prompt">In two sentences, explain why the sky is blue.</textarea></div>
-  <div class="row"><label>max tokens <input id="n" type="number" value="64" min="1"></label><button id="send" disabled>Send</button></div>
-  <div id="reply"></div>
-  <details><summary>log</summary><div id="log"></div></details>
+  <h1>diskformer chat</h1>
+  <p>Run a mixture-of-experts model larger than your GPU memory, in this tab. The model file stays in this browser's
+    private storage on your disk (OPFS). llama.cpp's WebGPU backend keeps the dense layers and a small cache of experts
+    on the GPU; diskformer reads every other expert from the file as each token needs it.</p>
+  <p class="muted">Chrome or Edge 137 or later, with WebGPU. Nothing leaves this tab except the model download.</p>
+  <p id="framed" hidden>This page is inside a frame, where browser storage can be partitioned or capped.
+    <a id="ownTab" target="_blank" rel="noopener">Open it in its own tab</a> to store large models.</p>
+  <p id="unsupported" class="muted" hidden></p>
+
+  <section class="card">
+    <table id="models"></table>
+    <div class="row" style="margin-top:12px">
+      <label>GPU memory budget (GB) <input id="budget" type="number" min="1" step="0.5" value="4"></label>
+      <label>Context (tokens) <select id="ctx"><option>1024</option><option selected>2048</option><option>4096</option></select></label>
+      <label>A GGUF from your disk <input id="file" type="file" accept=".gguf"></label>
+    </div>
+    <div class="bar"><span id="fill"></span></div>
+    <p id="status" class="muted">Pick a model. The first time, it downloads once into this browser's storage.</p>
+  </section>
+
+  <section class="card" id="meterCard" hidden>
+    <div class="meter">
+      <div><b id="mDisk">–</b><span>model file on disk (OPFS)</span></div>
+      <div><b id="mGpu">–</b><span id="mGpuNote">on the GPU</span></div>
+      <div><b id="mSlots">–</b><span id="mSlotsNote">experts cached on the GPU</span></div>
+      <div><b id="mSpeed">–</b><span>decode speed</span></div>
+      <div><b id="mRead">–</b><span>read from disk per token</span></div>
+    </div>
+  </section>
+
+  <section id="chat" hidden>
+    <div id="log"></div>
+    <form id="ask">
+      <textarea id="q" rows="2" placeholder="Ask something"></textarea>
+      <button class="primary" id="send">Send</button>
+      <button type="button" id="stop" disabled>Stop</button>
+      <button type="button" id="clear">New chat</button>
+    </form>
+  </section>
+
+  <details><summary>llama.cpp log</summary><div id="devlog"></div></details>
+  <footer>Greedy decoding, so the same question gets the same answer. Built on
+    <a href="https://github.com/NakliTechie/diskformer.js">diskformer.js</a> and
+    <a href="https://github.com/ggml-org/llama.cpp">llama.cpp</a>'s WebGPU backend, with expert paging from the
+    <a href="https://github.com/NakliTechie/llama.cpp/tree/webgpu-disk-tier">webgpu-disk-tier</a> branch.
+    Each model is downloaded from Hugging Face under its own license.
+    The earlier hand-written engines: <a href="classic/">classic page</a>.</footer>
 </main>
+
 <script type="module">
-  const $ = (id) => document.getElementById(id);
-  const worker = new Worker(`./worker.mjs?${Date.now()}`, { type: 'module' });
-  const gb = (b) => (b / 1e9).toFixed(2);
-  window.dfResult = null;  // last reply + stats, for scripted checks
-  $('file').onchange = () => { $('load').disabled = !$('file').files.length; };
-  $('load').onclick = () => {
-    $('load').disabled = true;
-    $('status').textContent = 'Loading…';
-    worker.postMessage({ type: 'load', file: $('file').files[0], budget: +$('budget').value * 1e9 });
-  };
-  $('send').onclick = () => {
-    $('send').disabled = true;
-    $('reply').textContent = '';
-    worker.postMessage({ type: 'chat', prompt: $('prompt').value, n: +$('n').value });
-  };
-  worker.onmessage = ({ data }) => {
-    if (data.type === 'log') $('log').textContent += data.line + '\n';
-    else if (data.type === 'progress') $('status').textContent = `Copying into browser storage… ${(data.copied / 1e9).toFixed(1)} of ${(data.total / 1e9).toFixed(1)} GB`;
-    else if (data.type === 'piece') $('reply').textContent += data.piece;
-    else if (data.type === 'plan') {
-      const p = data.plan;
-      $('status').textContent = p.error
-        ? `Budget too small: dense ${gb(p.dense)} + KV ${gb(p.kv)} + compute ${gb(p.compute)} GB leave room for ${p.slots} expert slots of ${gb(p.per_slot)} GB; one token routes to ${p.n_used}.`
-        : `Planning… ${p.slots} expert slots of ${gb(p.per_slot)} GB each.`;
-    } else if (data.type === 'loaded') {
-      const p = data.plan, bill = p ? ` GPU bill: dense ${gb(p.dense)} + KV ${gb(p.kv)} + compute ${gb(p.compute)} + ${data.slots} slots × ${gb(p.per_slot)} GB.` : '';
-      $('status').textContent = data.rc === 0 ? `Loaded in ${(data.ms / 1000).toFixed(1)} s.${bill}` : `Load failed (code ${data.rc}); see log.`;
-      $('send').disabled = data.rc !== 0;
-      window.dfLoaded = data;
-    } else if (data.type === 'done') {
-      const s = data.stats;
-      $('status').textContent = `${s.decode_tokens} tokens · ${(s.decode_tokens / (s.decode_ms / 1000)).toFixed(2)} tok/s decode · prompt ${s.prompt_tokens} tokens in ${(s.prompt_ms / 1000).toFixed(1)} s`;
-      $('send').disabled = false;
-      window.dfResult = data;
-    } else if (data.type === 'error') {
-      $('status').textContent = 'Error: ' + data.message;
-      window.dfError = data.message;
-    }
-  };
+// Models with a recorded gate on this path (examples/chat/refs, plan/width-2026-10-13.md). Sizes are the exact
+// file sizes, so a download is complete only at that size.
+const HF = (repo, file) => `https://huggingface.co/${repo}/resolve/main/${file}`;
+const CATALOG = [
+  { name: 'LFM2-8B-A1B-Q4_K_M.gguf', label: 'LFM2 8B-A1B', note: 'Liquid AI · 1B active', size: 5044779712, url: HF('LiquidAI/LFM2-8B-A1B-GGUF', 'LFM2-8B-A1B-Q4_K_M.gguf') },
+  { name: 'OLMoE-1B-7B-0125-Instruct-Q4_K_M.gguf', label: 'OLMoE 1B-7B', note: 'Ai2 · 1B active', size: 4213512192, url: HF('allenai/OLMoE-1B-7B-0125-Instruct-GGUF', 'OLMoE-1B-7B-0125-Instruct-Q4_K_M.gguf') },
+  { name: 'Qwen3-30B-A3B-Instruct-2507-Q3_K_M.gguf', label: 'Qwen3 30B-A3B', note: 'Qwen · 3B active', size: 14711847328, url: HF('unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF', 'Qwen3-30B-A3B-Instruct-2507-Q3_K_M.gguf') },
+  { name: 'Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf', label: 'Qwen3-Next 80B-A3B', note: 'Qwen · 3B active · proof of concept, slow', size: 48410988384, url: HF('Qwen/Qwen3-Next-80B-A3B-Instruct-GGUF', 'Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf'), budget: 5 },
+];
+const $ = (id) => document.getElementById(id);
+const GB = (n) => (n / 1e9).toFixed(n >= 1e10 ? 1 : 2) + ' GB';
+const MB = (n) => (n / 1e6).toFixed(0) + ' MB';
+const q = new URLSearchParams(location.search);
+let worker = new Worker(new URL('./worker.mjs', import.meta.url), { type: 'module' });
+let stored = [], busy = '', loaded = null, messages = [], current = null;   // busy: '' | 'download' | 'load' | 'reply'
+
+const status = (text, bad = false) => { $('status').textContent = text; $('status').className = bad ? 'bad' : 'muted'; window.progressText = text; };
+const fill = (f) => { $('fill').style.width = `${Math.round(100 * f)}%`; };
+addEventListener('unhandledrejection', (e) => status(`Error: ${e.reason && e.reason.message || e.reason}`, true));
+if (window.self !== window.top) { $('framed').hidden = false; $('ownTab').href = location.href; }
+const supported = !!navigator.gpu && typeof WebAssembly.Suspending === 'function';
+if (!supported) { $('unsupported').hidden = false; $('unsupported').textContent = 'This browser lacks WebGPU or WebAssembly JSPI. Use Chrome or Edge 137 or later.'; }
+
+// One message to the worker; resolves with the first reply of one of `types`, rejects on 'error'.
+let onMsg = () => {};
+worker.onmessage = ({ data }) => onMsg(data);
+function send(msg, types, onOther = () => {}) {
+  return new Promise((resolve, reject) => {
+    onMsg = (d) => {
+      if (d.type === 'log') { $('devlog').textContent += d.line + '\n'; return; }
+      if (d.type === 'error') { onMsg = () => {}; reject(new Error(d.message)); return; }
+      if (types.includes(d.type)) { onMsg = () => {}; resolve(d); return; }
+      onOther(d);
+    };
+    worker.postMessage(msg);
+  });
+}
+
+function controls() {
+  for (const b of $('models').querySelectorAll('button')) b.disabled = !!busy && !(busy === 'download' && b.dataset.act === 'stop');
+  $('budget').disabled = $('ctx').disabled = $('file').disabled = !!busy || !supported;
+  $('send').disabled = !!busy || !loaded; $('stop').disabled = busy !== 'reply'; $('clear').disabled = !!busy;
+}
+
+function renderModels() {
+  const byName = Object.fromEntries(stored.map((m) => [m.name, m]));
+  const rows = [...CATALOG, ...stored.filter((m) => !CATALOG.some((c) => c.name === m.name)).map((m) => ({ name: m.name, label: m.name, note: 'your file', size: m.size }))];
+  $('models').replaceChildren(...rows.map((m) => {
+    const s = byName[m.name], tr = document.createElement('tr');
+    const cell = (html, cls) => { const td = tr.insertCell(); td.innerHTML = html; if (cls) td.className = cls; return td; };
+    cell(`<b>${m.label}</b><br><span class="tag">${m.note}</span>`);
+    cell(GB(m.size), 'num');
+    const state = !s ? 'not stored' : s.partial ? `${GB(s.size)} of ${GB(m.size)} stored` : 'stored';
+    cell(`<span class="tag">${state}</span>`, 'num');
+    const act = cell('', 'act');
+    const btn = (label, fn, cls, key) => { const b = document.createElement('button'); b.textContent = label; if (cls) b.className = cls; if (key) b.dataset.act = key; b.onclick = fn; act.append(b); };
+    if (busy === 'download' && current === m.name) btn('Stop', () => worker.postMessage({ type: 'abort' }), '', 'stop');
+    else if (s && !s.partial) btn(loaded && loaded.name === m.name ? 'Loaded' : 'Load', () => load(m), 'primary');
+    else if (m.url && supported) btn(s ? 'Resume' : 'Download', () => download(m), 'primary');
+    if (s) btn('Remove', () => remove(m));
+    return tr;
+  }));
+  controls();
+}
+
+async function refresh() { stored = (await send({ type: 'list' }, ['models'])).models; renderModels(); }
+
+async function download(m) {
+  const est = navigator.storage.estimate ? await navigator.storage.estimate() : {};
+  const have = (stored.find((s) => s.name === m.name) || {}).size || 0;
+  if (est.quota && est.quota - (est.usage || 0) < m.size - have) status(`Needs ${GB(m.size - have)} more; the browser allows ${GB(est.quota - (est.usage || 0))} so far and usually raises that as the download writes, while the disk has room.`);
+  await (navigator.storage.persist ? navigator.storage.persist() : null);
+  busy = 'download'; current = m.name; renderModels();
+  try {
+    await send({ type: 'download', url: m.url, name: m.name, size: m.size }, ['models'], (d) => {
+      if (d.type === 'progress') {
+        fill(d.copied / d.total);
+        const left = d.rate ? (d.total - d.copied) / d.rate : 0;
+        status(`Downloading ${m.label} into this browser's storage (once): ${GB(d.copied)} of ${GB(d.total)}${d.rate ? ` · ${(d.rate / 1e6).toFixed(0)} MB/s · ${Math.ceil(left / 60)} min left` : ''}`);
+      }
+    }).then((d) => { stored = d.models; });
+    status(`${m.label} is stored. Load it to chat.`);
+  } catch (e) { status(e.message, /stopped/.test(e.message) ? false : true); await refresh(); }
+  finally { busy = ''; current = null; renderModels(); }
+}
+
+async function remove(m) {
+  if (loaded && loaded.name === m.name) { await restartWorker(); }
+  stored = (await send({ type: 'remove', name: m.name }, ['removed'])).models;
+  status(`Removed ${m.label} from this browser's storage.`); fill(0); renderModels();
+}
+
+// A fresh worker: llama.cpp holds the GPU device and the file handles until its worker ends.
+async function restartWorker() {
+  worker.terminate();
+  worker = new Worker(new URL('./worker.mjs', import.meta.url), { type: 'module' });
+  worker.onmessage = ({ data }) => onMsg(data);
+  loaded = null; $('chat').hidden = true; $('meterCard').hidden = true;
+}
+
+async function load(m, file) {
+  if (busy) return;
+  if (loaded) await restartWorker();
+  if (m && m.budget && Number($('budget').value) < m.budget) $('budget').value = m.budget;   // its experts need the room
+  const budget = Number($('budget').value) * 1e9, ctx = Number($('ctx').value);
+  busy = 'load'; renderModels(); fill(0);
+  status(file ? `Copying ${file.name} into this browser's storage, then loading` : `Loading ${m.label} from this browser's storage`);
+  const t0 = performance.now();
+  try {
+    const d = await send({ type: 'load', ...(file ? { file } : { opfsName: m.name }), budget, ctx }, ['loaded'], (x) => {
+      if (x.type === 'progress') { fill(x.copied / x.total); status(`Copying into this browser's storage (once): ${GB(x.copied)} of ${GB(x.total)}`); }
+      else if (x.type === 'plan' && !x.plan.error) status(`Planning: ${x.plan.slots} expert slots on the GPU, then loading the dense layers`);
+    });
+    if (d.rc !== 0) throw new Error(`llama.cpp could not load the model (code ${d.rc}); see the log below`);
+    const p = d.plan, gpu = p.dense + p.kv + p.compute + d.slots * p.per_slot;
+    loaded = { name: d.name, label: m ? m.label : d.name, size: d.size, plan: p, slots: d.slots };
+    $('mDisk').textContent = GB(d.size);
+    $('mGpu').textContent = GB(gpu);
+    $('mGpuNote').textContent = `on the GPU, budget ${GB(budget)}`;
+    $('mSlots').textContent = `${d.slots} of ${p.n_expert}`;
+    $('mSlotsNote').textContent = `experts per layer cached on the GPU; ${p.n_used} used per token`;
+    $('mSpeed').textContent = '–'; $('mRead').textContent = '–';
+    $('meterCard').hidden = false; $('chat').hidden = false;
+    fill(1);
+    status(`Loaded ${loaded.label} in ${((performance.now() - t0) / 1000).toFixed(1)} s: ${GB(d.size)} on disk, ${GB(gpu)} on the GPU.`);
+    messages = []; $('log').replaceChildren();
+    window.dfLoaded = d;
+  } catch (e) {
+    const m2 = /budget .* does not hold/.test(e.message) ? `${e.message}. Raise the GPU memory budget.` : `Could not load: ${e.message}`;
+    status(m2, true); await restartWorker();
+  } finally { busy = ''; await refresh(); }
+}
+
+// Plain text with paragraphs, **bold**, `code` and ``` blocks; everything else escaped.
+function render(text) {
+  const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+  return text.split(/```/).map((part, i) => i % 2
+    ? `<pre><code>${esc(part.replace(/^[\w-]*\n/, ''))}</code></pre>`
+    : part.split(/\n{2,}/).filter((p) => p.trim()).map((p) => `<p>${esc(p).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\n/g, '<br>')}</p>`).join('')).join('');
+}
+function bubble(role, text) { const d = document.createElement('div'); d.className = `msg ${role}`; if (role === 'user') d.textContent = text; else d.innerHTML = render(text); $('log').append(d); return d; }
+
+$('ask').onsubmit = async (e) => {
+  e.preventDefault();
+  const text = $('q').value.trim();
+  if (!text || !loaded || busy) return;
+  $('q').value = '';
+  messages.push({ role: 'user', content: text });
+  bubble('user', text);
+  const out = bubble('model', '…');
+  busy = 'reply'; controls();
+  let reply = '', tokens = 0, tFirst = 0;
+  try {
+    const d = await send({ type: 'chat', messages, n: 512 }, ['done'], (x) => {
+      if (x.type !== 'piece') return;
+      if (!tokens) tFirst = performance.now();
+      tokens++; reply += x.piece; out.innerHTML = render(reply);
+      if (tokens > 2) $('mSpeed').textContent = `${((tokens - 1) / ((performance.now() - tFirst) / 1000)).toFixed(1)} tok/s`;
+    });
+    const s = d.stats;
+    reply = d.text; out.innerHTML = render(reply);
+    if (s.decode_tokens > 1) $('mSpeed').textContent = `${(s.decode_tokens / (s.decode_ms / 1000)).toFixed(1)} tok/s`;
+    if (s.decode_tokens > 0) $('mRead').textContent = MB(s.decode_read_bytes / s.decode_tokens);
+    const note = document.createElement('div'); note.className = 'note';
+    note.textContent = `${s.decode_tokens} tokens · ${(s.decode_tokens / Math.max(0.001, s.decode_ms / 1000)).toFixed(1)} tok/s · prompt ${s.prompt_tokens} tokens in ${(s.prompt_ms / 1000).toFixed(1)} s`
+      + (s.aborted ? ' · stopped' : '') + (s.context_full ? ' · the context is full: start a new chat' : '');
+    out.append(note);
+    if (reply) messages.push({ role: 'assistant', content: reply }); else messages.pop();
+    window.dfResult = d;
+  } catch (err) { out.textContent = `Error: ${err.message}`; messages.pop(); }
+  finally { busy = ''; controls(); }
+};
+$('stop').onclick = () => worker.postMessage({ type: 'abort' });
+$('clear').onclick = () => { messages = []; $('log').replaceChildren(); };
+$('q').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('ask').requestSubmit(); } };
+$('file').onchange = () => { const f = $('file').files[0]; if (f) load(null, f); };
+
+if (q.get('budget')) $('budget').value = q.get('budget');
+await refresh();
 </script>
+</body>
 </html>

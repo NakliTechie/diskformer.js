@@ -22,8 +22,8 @@ Plain ES modules, no dependencies, no build step. Chromium with WebGPU. Weights 
 
 ## Try it: a 14.4 GB model in 2.5 GB of GPU memory
 
-Open [diskformer.naklitechie.com](https://diskformer.naklitechie.com/) (also on a [Hugging Face Space](https://huggingface.co/spaces/naklitechie/diskformer-chat)), or serve `examples/chat` yourself.
-Pick a model and a GPU memory budget. The page downloads the model once into OPFS, resumably, then chats.
+[diskformer.naklitechie.com](https://diskformer.naklitechie.com/) (also a [Hugging Face Space](https://huggingface.co/spaces/naklitechie/diskformer-chat)) runs llama.cpp's WebGPU backend with paged experts: LFM2 8B-A1B, OLMoE, Qwen3 30B-A3B, Qwen3-Next 80B (source in `ggml/`; references in `examples/chat/refs/`).
+The hand-written engines measured below are at [/classic/](https://diskformer.naklitechie.com/classic/); serve `examples/chat` to run them locally. Each page downloads a model once into OPFS, resumably.
 
 ```bash
 python3 -m http.server 8000      # then open http://localhost:8000/examples/chat/

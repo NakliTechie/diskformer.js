@@ -11,6 +11,9 @@ on:
       - src/**
       - engines/**
       - examples/chat/**
+      - ggml/chat.html
+      - ggml/worker.mjs
+      - ggml/dist/**
       - scripts/build-space.mjs
       - LICENSE
       - wrangler.jsonc
@@ -36,7 +39,7 @@ jobs:
           from huggingface_hub import HfApi
           # upload_folder, not `hf upload`: the CLI re-creates the repo without an SDK and gets HTTP 402.
           HfApi().upload_folder(repo_id='naklitechie/diskformer-chat', repo_type='space', folder_path='space',
-              commit_message='Sync from GitHub', delete_patterns=['*.html', '*.md', 'LICENSE', 'src/**', 'engines/**', 'refs/**'])
+              commit_message='Sync from GitHub', delete_patterns=['*.html', '*.md', 'LICENSE', 'src/**', 'engines/**', 'refs/**', 'ggml/**', 'classic/**'])
           PY
 
   site:

@@ -10,6 +10,8 @@
 #include "llama.h"
 #include "llama-ext.h"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <clocale>
 #include <cstdio>
@@ -60,6 +62,8 @@ struct df_gguf_source {
     std::unordered_map<std::string, size_t> offsets;
 };
 static df_gguf_source g_src;
+// Expert bytes read from the GGUF and read calls, since load: the page's "read from disk" figures.
+static double g_read_bytes = 0, g_read_calls = 0;
 
 static bool df_src_has(void * ud, const char * name, size_t) {
     return ((df_gguf_source *) ud)->offsets.count(name) != 0;
@@ -73,6 +77,10 @@ static void df_src_write(void *, const char * name, size_t, const void *, size_t
 static void df_src_read_batch(void * ud, size_t n, const char * const * names, const size_t * offs, void * const * dsts,
                               const size_t * sizes) {
     auto * src = (df_gguf_source *) ud;
+    for (size_t i = 0; i < n; i++) {
+        g_read_bytes += (double) sizes[i];
+    }
+    g_read_calls += (double) n;
 #ifdef __EMSCRIPTEN__
     std::vector<double> o(n), sz(n);
     for (size_t i = 0; i < n; i++) {
@@ -111,7 +119,9 @@ static void df_src_upload_batch(void * ud, void * device, size_t n, const char *
                                 const size_t * sizes, void * const * buffers, const size_t * dst_offs) {
     auto *              src = (df_gguf_source *) ud;
     std::vector<double> o(n), sz(n), d(n);
+    g_read_calls += (double) n;
     for (size_t i = 0; i < n; i++) {
+        g_read_bytes += (double) sizes[i];
         o[i]  = (double) (src->offsets.at(names[i]) + offs[i]);
         sz[i] = (double) sizes[i];
         d[i]  = (double) dst_offs[i];
@@ -145,6 +155,7 @@ static llama_context *           g_ctx   = nullptr;
 static common_chat_templates_ptr g_tmpls;
 static std::string               g_out;
 static std::string               g_stats;
+static volatile bool             g_abort = false;  // set by df_abort() while a reply streams (JSPI yields between reads)
 
 typedef ggml_backend_buffer_type_t (*df_paged_buft_fn)(ggml_backend_dev_t, uint32_t, const ggml_webgpu_page_source *);
 
@@ -300,6 +311,14 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char * df_complete(const char * prompt, in
     llama_batch_ext * batch = llama_batch_ext_init(g_ctx);
 
     g_out.clear();
+    g_abort                = false;
+    const int     n_ctx    = (int) llama_n_ctx(g_ctx);
+    const double  read0    = g_read_bytes;
+    double        read_decode0 = 0;
+    bool          ctx_full = tokens.size() + 1 >= (size_t) n_ctx;
+    if (ctx_full) {
+        tokens.clear();
+    }
     const int64_t t0       = ggml_time_us();
     int64_t       t_first  = 0;
     int           n_pos    = 0;
@@ -320,10 +339,15 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char * df_complete(const char * prompt, in
         }
         n_pos += n;
     }
-    for (int k = 0; k < n_predict && g_out != "[decode failed]"; k++) {
+    for (int k = 0; k < n_predict && !ctx_full && g_out != "[decode failed]"; k++) {
         llama_token id = llama_sampler_sample(smpl, g_ctx, -1);
         if (k == 0) {
-            t_first = ggml_time_us();
+            t_first      = ggml_time_us();
+            read_decode0 = g_read_bytes;
+        }
+        if (g_abort || n_pos + 1 >= n_ctx) {
+            ctx_full = !g_abort;
+            break;
         }
         if (llama_vocab_is_eog(vocab, id)) {
             break;
@@ -348,7 +372,12 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char * df_complete(const char * prompt, in
     g_stats          = "{\"prompt_tokens\":" + std::to_string(tokens.size()) +
               ",\"prompt_ms\":" + std::to_string((t_first - t0) / 1000) +
               ",\"decode_tokens\":" + std::to_string(n_decode) +
-              ",\"decode_ms\":" + std::to_string((t1 - t_first) / 1000) + "}";
+              ",\"decode_ms\":" + std::to_string((t1 - t_first) / 1000) +
+              ",\"prompt_read_bytes\":" + std::to_string((long long) (read_decode0 - read0)) +
+              ",\"decode_read_bytes\":" + std::to_string((long long) (g_read_bytes - read_decode0)) +
+              ",\"read_bytes_total\":" + std::to_string((long long) g_read_bytes) +
+              ",\"n_ctx\":" + std::to_string(n_ctx) + ",\"n_pos\":" + std::to_string(n_pos) +
+              ",\"aborted\":" + (g_abort ? "true" : "false") + ",\"context_full\":" + (ctx_full ? "true" : "false") + "}";
     llama_batch_ext_free(batch);
     llama_sampler_free(smpl);
     return g_out.c_str();
@@ -367,13 +396,31 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char * df_chat(const char * user, int n_pr
     return df_complete(prompt.c_str(), n_predict);
 }
 
+// A whole conversation through the model's chat template (jinja), greedy: messages as JSON [{"role","content"}, ...].
+// The KV cache is rebuilt from the full prompt each turn.
+extern "C" EMSCRIPTEN_KEEPALIVE const char * df_chat_messages(const char * messages_json, int n_predict) {
+    common_chat_templates_inputs inputs;
+    inputs.use_jinja = true;
+    for (const auto & m : nlohmann::ordered_json::parse(messages_json)) {
+        common_chat_msg msg;
+        msg.role    = m.at("role").get<std::string>();
+        msg.content = m.at("content").get<std::string>();
+        inputs.messages.push_back(msg);
+    }
+    inputs.add_generation_prompt = true;
+    const std::string prompt     = common_chat_templates_apply(g_tmpls.get(), inputs).prompt;
+    return df_complete(prompt.c_str(), n_predict);
+}
+
+// Stops the reply in progress at the next token.
+extern "C" EMSCRIPTEN_KEEPALIVE void df_abort() { g_abort = true; }
+
 extern "C" EMSCRIPTEN_KEEPALIVE const char * df_stats() {
     return g_stats.c_str();
 }
 
 #ifndef __EMSCRIPTEN__
 #    include <fstream>
-#    include <nlohmann/json.hpp>
 
 // The reference reply minus the generation prefix it repeats (the longest suffix of the prompt it starts with).
 static std::string df_expected(const std::string & prompt, const std::string & content) {
