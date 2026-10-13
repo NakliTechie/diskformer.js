@@ -4,7 +4,7 @@
 // (-ot exps=WebGPU_Paged, read from the GGUF), so paged and unpaged runs of one backend can be compared
 // (scripts/compare-refs.mjs).
 //
-//   node scripts/record-refs.mjs <model.gguf> <out.json> [--port 8799] [--ctx 4096] [--server <llama-server>] [--paged <slots>]
+//   node scripts/record-refs.mjs <model.gguf> <out.json> [--port 8799] [--ctx 4096] [--server <llama-server>] [--paged <slots>] [--ngl 0 (CPU)] [--no-stream]
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, readFileSync, writeFileSync } from 'node:fs';
@@ -16,8 +16,8 @@ if (!gguf || !out) {
   process.exit(2);
 }
 const opt = (name, dflt) => (rest.includes(name) ? rest[rest.indexOf(name) + 1] : dflt);
-const port = +opt('--port', 8799), ctx = +opt('--ctx', 4096), bin = opt('--server', 'llama-server'), paged = opt('--paged', null);
-const backend = bin === 'llama-server' ? 'Metal' : paged ? `WebGPU, experts paged (${paged} slots)` : 'WebGPU';
+const port = +opt('--port', 8799), ctx = +opt('--ctx', 4096), bin = opt('--server', 'llama-server'), paged = opt('--paged', null), ngl = opt('--ngl', '99');
+const backend = ngl === '0' ? 'CPU' : bin === 'llama-server' ? 'Metal' : paged ? `WebGPU, experts paged (${paged} slots)` : 'WebGPU';
 const base = `http://127.0.0.1:${port}`;
 const conversations = JSON.parse(readFileSync(new URL('../examples/chat/refs/gemma.json', import.meta.url))).conversations;
 
@@ -31,7 +31,45 @@ const post = async (path, body) => {
   return r.json();
 };
 
-const server = spawn(bin, ['-m', gguf, '-ngl', '99', '-c', String(ctx), '--port', String(port), '--jinja', ...(paged ? ['-ot', 'exps=WebGPU_Paged'] : [])], {
+// Streamed, so the response headers arrive at once: a slow backend (a large model paged from disk) can take longer per
+// reply than fetch waits for headers (5 minutes).
+// --no-stream: one plain request per reply through curl (on Qwen3-Next, llama-server b9830's CPU path closed a stream
+// mid-prompt, and Node's fetch dropped plain requests).
+async function chat(messages, maxTokens) {
+  if (rest.includes('--no-stream')) {
+    // curl, not fetch: Node's fetch dropped the connection while a slow server worked on a reply.
+    // Up to 3 tries: the server sometimes closes a long request with an empty reply (curl 52); greedy, so a retry is
+    // the same reply.
+    let out;
+    for (let t = 0; t < 3; t++) {
+      out = spawnSync('curl', ['-s', '--max-time', '3600', '-H', 'content-type: application/json', '-d', JSON.stringify({ messages, temperature: 0, max_tokens: maxTokens }), `${base}/v1/chat/completions`], { encoding: 'utf8', maxBuffer: 1 << 24 });
+      if (out.status === 0) break;
+      console.error(`curl exited ${out.status}; retrying`);
+    }
+    if (out.status !== 0) throw new Error(`curl exited ${out.status} three times: ${out.stderr}`);
+    const r = JSON.parse(out.stdout);
+    return { content: r.choices[0].message.content, finish: r.choices[0].finish_reason };
+  }
+  const r = await fetch(base + '/v1/chat/completions', { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ messages, temperature: 0, max_tokens: maxTokens, stream: true }) });
+  if (!r.ok) throw new Error(`/v1/chat/completions: HTTP ${r.status} ${await r.text()}`);
+  let content = '', finish = null, buf = '';
+  const dec = new TextDecoder();
+  for await (const chunk of r.body) {
+    buf += dec.decode(chunk, { stream: true });
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+      if (!line.startsWith('data:') || line === 'data: [DONE]') continue;
+      const ch = JSON.parse(line.slice(5)).choices[0];
+      if (ch.delta && ch.delta.content) content += ch.delta.content;
+      if (ch.finish_reason) finish = ch.finish_reason;
+    }
+  }
+  return { content, finish };
+}
+
+const server = spawn(bin, ['-m', gguf, '-ngl', ngl, '-c', String(ctx), '--port', String(port), '--jinja', '--timeout', '3600', ...(paged ? ['-ot', 'exps=WebGPU_Paged'] : [])], {
   stdio: ['ignore', 'ignore', 'pipe'],
   env: paged ? { ...process.env, GGML_WEBGPU_PAGED_SLOTS: paged, GGML_WEBGPU_PAGED_FILE: gguf } : process.env,
 });
@@ -46,7 +84,7 @@ try {
     if (server.exitCode !== null || failed) throw new Error(`llama-server failed (${failed || `exit ${server.exitCode}`}):\n${log.slice(-2000)}`);
     const ok = await fetch(`${base}/health`).then((r) => r.ok).catch(() => false);
     if (ok) break;
-    if (i > 600) throw new Error('llama-server did not become healthy in 10 minutes');
+    if (i > 1800) throw new Error('llama-server did not become healthy in 30 minutes');
     await new Promise((r) => setTimeout(r, 1000));
   }
   const ver = spawnSync(bin, ['--version'], { encoding: 'utf8' });  // prints on stderr
@@ -56,17 +94,19 @@ try {
   const result = [];
   for (const c of conversations) {
     const { prompt } = await post('/apply-template', { messages: c.messages });
-    const r = await post('/v1/chat/completions', { messages: c.messages, temperature: 0, max_tokens: c.tokens });
-    const content = r.choices[0].message.content;
-    result.push({ name: c.name, messages: c.messages, prompt, content, finish: r.choices[0].finish_reason, tokens: c.tokens });
+    const { content, finish } = await chat(c.messages, c.tokens);
+    result.push({ name: c.name, messages: c.messages, prompt, content, finish, tokens: c.tokens });
     console.log(`${c.name}: ${JSON.stringify(content.slice(0, 60))}…`);
   }
   const doc = {
-    about: `llama.cpp ${version || '?'}, ${backend}, -ngl 99: llama-server /v1/chat/completions, temperature 0, max_tokens 64, on ${basename(gguf)} (sha256 ${await sha256()}). Recorded ${new Date().toISOString().slice(0, 10)} by scripts/record-refs.mjs.`,
+    about: `llama.cpp ${version || '?'}, ${backend}, -ngl ${ngl}: llama-server /v1/chat/completions, temperature 0, max_tokens 64, on ${basename(gguf)} (sha256 ${await sha256()}). Recorded ${new Date().toISOString().slice(0, 10)} by scripts/record-refs.mjs.`,
     conversations: result,
   };
   writeFileSync(out, JSON.stringify(doc, null, 1) + '\n');
   console.log(`wrote ${out}`);
+} catch (e) {
+  console.error(`${e.message}\nserver ${server.exitCode !== null ? `exited ${server.exitCode}` : 'still running'}, last log:\n${log.slice(-3000)}`);
+  process.exitCode = 1;
 } finally {
   stop();
 }
