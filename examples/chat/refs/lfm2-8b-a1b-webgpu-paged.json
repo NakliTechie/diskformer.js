@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp fork build 11473 (3119cf53d), WebGPU, experts paged (8 slots), -ngl 99: llama-server /v1/chat/completions, temperature 0, max_tokens 64, on LFM2-8B-A1B-Q4_K_M.gguf (sha256 d2185b22630fc68043dac7182f12e86e5ad14990229a90b6c9ad3f4421ddaf82). Recorded 2026-10-13 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<|im_start|>user\nExplain the difference between TCP and UDP to a new programmer.<|im_end|>\n<|im_start|>assistant\n",
+   "content": "Sure! Here's a simple explanation of the difference between **TCP** and **UDP** for a new programmer:\n\n---\n\n### 🌐 What Are TCP and UDP?\n\n**TCP (Transmission Control Protocol)** and **UDP (User Datagram Protocol)** are two",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<|im_start|>user\nExtract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<|im_end|>\n<|im_start|>assistant\n",
+   "content": "```json\n{\n  \"name\": \"Priya\",\n  \"city\": \"Lisbon\",\n  \"age\": 34\n}\n```",
+   "finish": "stop",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<|im_start|>user\nTranslate into Hindi: \"The library opens at nine and closes at six.\"<|im_end|>\n<|im_start|>assistant\n",
+   "content": "क़लिय़ नौ से खुला होता है और शिश से खोटा होता है",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<|im_start|>user\nA train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<|im_end|>\n<|im_start|>assistant\n",
+   "content": "To find the journey duration:  \n- Departure time: 14:10  \n- Arrival time: 17:45  \n- Subtract: 17:45 – 14:10 = 3 hours and 35 minutes  \n\nThe journey lasts **3 hours and 35 minutes**.",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<|im_start|>user\nWrite a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<|im_end|>\n<|im_start|>assistant\n",
+   "content": "To retrieve the five customers with the highest total order value, you can use a SQL query that joins the `customers` and `orders` tables, sums the `amount` per customer, and then orders the result in descending order while limiting to the top 5. Here’s the query:\n\n```sql\n",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<|im_start|>user\nList five major rivers of Africa, one per line, with the country where each reaches the sea.<|im_end|>\n<|im_start|>assistant\n",
+   "content": "1. Nile River – Egypt (reaches the Mediterranean Sea)  \n2. Congo River – Democratic Republic of the Congo (reaches the Atlantic",
+   "finish": "length",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<|im_start|>user\nWhat do these emoji usually mean in a text message: 🙏 🔥 💀 ?<|im_end|>\n<|im_start|>assistant\n",
+   "content": "The emoji combination **🙏 🔥 💀** is often used humorously or sarcastically in text messages to convey a playful or ironic tone. Here’s what each emoji typically represents and how they work together:\n\n- **🙏 (Praying Hands)",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<|im_start|>user\nWrite a haiku about autumn leaves in a city.<|im_end|>\n<|im_start|>assistant\n",
+   "content": "Crimson whispers fall,  \nSteel rooftops cradle light—  \nCity",
+   "finish": "length",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<|im_start|>system\nAnswer like a cheerful pirate, in two sentences.<|im_end|>\n<|im_start|>user\nWhat is the boiling point of water at sea level?<|im_end|>\n<|im_start|>assistant\n",
+   "content": "Ahoy there, matey! At sea level, water boils bright and bold at a cheerful 100 degrees Celsius—just enough heat to turn a humble drop into a bubbling spectacle! ",
+   "finish": "length",
+   "tokens": 41
+  }
+ ]
+}
