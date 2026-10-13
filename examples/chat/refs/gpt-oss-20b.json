@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp b9830 (c1a1c8ee9), Metal, -ngl 99: llama-server /v1/chat/completions, temperature 0, max_tokens 64, on gpt-oss-20b-MXFP4.gguf (sha256 27cd6c432c7672cb812a92f611cf3ba7bbc35928262bb1e1253ff4ee6ae35901). Recorded 2026-10-13 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<|start|>system<|message|>You are ChatGPT, a large language model trained by OpenAI.\nKnowledge cutoff: 2024-06\nCurrent date: 2026-10-13\n\nReasoning: medium\n\n# Valid channels: analysis, commentary, final. Channel must be included for every message.<|end|><|start|>user<|message|>Explain the difference between TCP and UDP to a new programmer.<|end|><|start|>assistant",
+   "content": "<|channel|>analysis<|message|>We need to explain difference between TCP and UDP to a new programmer. Should be clear, simple, maybe analogies. Cover reliability, ordering, connection, speed, overhead, use cases. Provide examples. Also mention ports, headers, flags. Should be accessible. Use analogies like mail vs text messages",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<|start|>system<|message|>You are ChatGPT, a large language model trained by OpenAI.\nKnowledge cutoff: 2024-06\nCurrent date: 2026-10-13\n\nReasoning: medium\n\n# Valid channels: analysis, commentary, final. Channel must be included for every message.<|end|><|start|>user<|message|>Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<|end|><|start|>assistant",
+   "content": "<|channel|>analysis<|message|>We need to extract name, city, age from the sentence: \"Priya, 34, moved from Pune to Lisbon last year.\" The name is Pri",
+   "finish": "length",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<|start|>system<|message|>You are ChatGPT, a large language model trained by OpenAI.\nKnowledge cutoff: 2024-06\nCurrent date: 2026-10-13\n\nReasoning: medium\n\n# Valid channels: analysis, commentary, final. Channel must be included for every message.<|end|><|start|>user<|message|>Translate into Hindi: \"The library opens at nine and closes at six.\"<|end|><|start|>assistant",
+   "content": "<|channel|>analysis<|message|>We need to translate the sentence into Hindi. The sentence: \"The library opens at nine and closes at six.\" In Hindi: \"पुस्तकालय नौ बजे खुलता है और छह बजे बंद होता है।\" Or \"पुस्तकालय नौ बजे खुलता है और छह बजे बंद",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<|start|>system<|message|>You are ChatGPT, a large language model trained by OpenAI.\nKnowledge cutoff: 2024-06\nCurrent date: 2026-10-13\n\nReasoning: medium\n\n# Valid channels: analysis, commentary, final. Channel must be included for every message.<|end|><|start|>user<|message|>A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<|end|><|start|>assistant",
+   "content": "<|channel|>analysis<|message|>We need to compute duration between 14:10 and 17:45. Steps: subtract times. 14:10 to 17:45: difference in hours: 17-14=3 hours. Minutes: 45-10=35 minutes. So 3 hours 35 minutes.",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<|start|>system<|message|>You are ChatGPT, a large language model trained by OpenAI.\nKnowledge cutoff: 2024-06\nCurrent date: 2026-10-13\n\nReasoning: medium\n\n# Valid channels: analysis, commentary, final. Channel must be included for every message.<|end|><|start|>user<|message|>Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<|end|><|start|>assistant",
+   "content": "<|channel|>analysis<|message|>We need to write a SQL query that returns the five customers with the highest total order value. We have tables customers(id, name) and orders(id, customer_id, amount). We need to compute total order value per customer, then order descending, limit 5. We need to join customers with orders",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<|start|>system<|message|>You are ChatGPT, a large language model trained by OpenAI.\nKnowledge cutoff: 2024-06\nCurrent date: 2026-10-13\n\nReasoning: medium\n\n# Valid channels: analysis, commentary, final. Channel must be included for every message.<|end|><|start|>user<|message|>List five major rivers of Africa, one per line, with the country where each reaches the sea.<|end|><|start|>assistant",
+   "content": "<|channel|>analysis<|message|>The user wants: \"List five major rivers of Africa, one per line, with the country where each reaches the sea.\" So",
+   "finish": "length",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<|start|>system<|message|>You are ChatGPT, a large language model trained by OpenAI.\nKnowledge cutoff: 2024-06\nCurrent date: 2026-10-13\n\nReasoning: medium\n\n# Valid channels: analysis, commentary, final. Channel must be included for every message.<|end|><|start|>user<|message|>What do these emoji usually mean in a text message: 🙏 🔥 💀 ?<|end|><|start|>assistant",
+   "content": "<|channel|>analysis<|message|>The user asks: \"What do these emoji usually mean in a text message: 🙏 🔥 💀 ?\" They want explanation of each emoji meaning. Provide context: 🙏 is \"prayer hands\" or \"thank you\" or \"please\" or \"apology\" or \"hands together\"",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<|start|>system<|message|>You are ChatGPT, a large language model trained by OpenAI.\nKnowledge cutoff: 2024-06\nCurrent date: 2026-10-13\n\nReasoning: medium\n\n# Valid channels: analysis, commentary, final. Channel must be included for every message.<|end|><|start|>user<|message|>Write a haiku about autumn leaves in a city.<|end|><|start|>assistant",
+   "content": "<|channel|>analysis<|message|>The user wants a haiku about autumn leaves in a city. Haiku is 5",
+   "finish": "length",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<|start|>system<|message|>You are ChatGPT, a large language model trained by OpenAI.\nKnowledge cutoff: 2024-06\nCurrent date: 2026-10-13\n\nReasoning: medium\n\n# Valid channels: analysis, commentary, final. Channel must be included for every message.<|end|><|start|>developer<|message|># Instructions\n\nAnswer like a cheerful pirate, in two sentences.\n\n<|end|><|start|>user<|message|>What is the boiling point of water at sea level?<|end|><|start|>assistant",
+   "content": "<|channel|>analysis<|message|>We need to answer as a cheerful pirate, in two sentences. The question: \"What is the boiling point of water at sea level?\" The answer: 100 degrees Celsius (212 degrees",
+   "finish": "length",
+   "tokens": 41
+  }
+ ]
+}

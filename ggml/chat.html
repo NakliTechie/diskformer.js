@@ -58,6 +58,7 @@
   .msg.user { align-self: flex-end; background: var(--accent-soft); border-color: #c9d5e5; max-width: 85%; white-space: pre-wrap; }
   .msg.model { background: var(--card); }
   .msg.model p { margin: 0 0 8px; } .msg.model p:last-child { margin: 0; }
+  .msg.model details.think { color: var(--muted); font-size: 0.92em; margin: 0 0 8px; } .msg.model details.think summary { cursor: pointer; }
   .msg code { background: var(--code); border-radius: 4px; padding: 1px 4px; font-size: 13px; }
   .msg pre { background: var(--code); border-radius: 6px; padding: 8px 10px; overflow-x: auto; margin: 0 0 8px; }
   .msg pre code { background: none; padding: 0; }
@@ -128,7 +129,9 @@
 const HF = (repo, file) => `https://huggingface.co/${repo}/resolve/main/${file}`;
 const CATALOG = [
   { name: 'LFM2-8B-A1B-Q4_K_M.gguf', label: 'LFM2 8B-A1B', note: 'Liquid AI · 1B active', size: 5044779712, url: HF('LiquidAI/LFM2-8B-A1B-GGUF', 'LFM2-8B-A1B-Q4_K_M.gguf') },
+  { name: 'granite-4.0-h-tiny-Q4_K_M.gguf', label: 'Granite 4.0 H Tiny', note: 'IBM · 1B active · Mamba-2 hybrid', size: 4230976352, url: HF('ibm-granite/granite-4.0-h-tiny-GGUF', 'granite-4.0-h-tiny-Q4_K_M.gguf') },
   { name: 'OLMoE-1B-7B-0125-Instruct-Q4_K_M.gguf', label: 'OLMoE 1B-7B', note: 'Ai2 · 1B active', size: 4213512192, url: HF('allenai/OLMoE-1B-7B-0125-Instruct-GGUF', 'OLMoE-1B-7B-0125-Instruct-Q4_K_M.gguf') },
+  { name: 'gpt-oss-20b-MXFP4.gguf', label: 'gpt-oss 20B', note: 'OpenAI · 3.6B active · reasons first', size: 12109566624, url: HF('ggml-org/gpt-oss-20b-GGUF', 'gpt-oss-20b-MXFP4.gguf') },
   { name: 'Qwen3-30B-A3B-Instruct-2507-Q3_K_M.gguf', label: 'Qwen3 30B-A3B', note: 'Qwen · 3B active', size: 14711847328, url: HF('unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF', 'Qwen3-30B-A3B-Instruct-2507-Q3_K_M.gguf') },
   { name: 'Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf', label: 'Qwen3-Next 80B-A3B', note: 'Qwen · 3B active · proof of concept, slow', size: 48410988384, url: HF('Qwen/Qwen3-Next-80B-A3B-Instruct-GGUF', 'Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf'), budget: 5 },
 ];
@@ -263,6 +266,26 @@ function render(text) {
     ? `<pre><code>${esc(part.replace(/^[\w-]*\n/, ''))}</code></pre>`
     : part.split(/\n{2,}/).filter((p) => p.trim()).map((p) => `<p>${esc(p).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(?=\S)([^*\n]+?)\*/g, '<i>$1</i>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\n/g, '<br>')}</p>`).join('')).join('');
 }
+// Models that reason before answering: gpt-oss writes harmony channels (analysis, then final); Qwen3.5/3.6 and
+// others write <think>...</think>, often with the opening tag already in the prompt.
+function split(text) {
+  if (text.includes('<|channel|>')) {
+    let thinking = '', answer = '';
+    for (const m of text.matchAll(/<\|channel\|>(\w+)<\|message\|>([\s\S]*?)(?=<\|end\|>|<\|return\|>|<\|start\|>|$)/g)) {
+      if (m[1] === 'final') answer += m[2]; else thinking += m[2];
+    }
+    return { thinking, answer, open: !text.includes('<|channel|>final') };
+  }
+  const close = text.indexOf('</think>');
+  if (close >= 0) return { thinking: text.slice(0, close).replace(/^\s*<think>/, ''), answer: text.slice(close + 8).replace(/^\s+/, ''), open: false };
+  if (/^\s*<think>/.test(text)) return { thinking: text.replace(/^\s*<think>/, ''), answer: '', open: true };
+  return { thinking: '', answer: text, open: false };
+}
+function renderReply(text) {
+  const r = split(text);
+  const think = r.thinking.trim() ? `<details class="think"${r.open ? ' open' : ''}><summary>${r.open ? 'Thinking…' : 'Thought'}</summary>${render(r.thinking)}</details>` : '';
+  return think + render(r.answer);
+}
 function bubble(role, text) { $('empty').hidden = true; const d = document.createElement('div'); d.className = `msg ${role}`; if (role === 'user') d.textContent = text; else d.innerHTML = render(text); $('log').append(d); $('log').scrollTop = $('log').scrollHeight; return d; }
 
 $('ask').onsubmit = async (e) => {
@@ -279,18 +302,20 @@ $('ask').onsubmit = async (e) => {
     const d = await send({ type: 'chat', messages, n: 512 }, ['done'], (x) => {
       if (x.type !== 'piece') return;
       if (!tokens) tFirst = performance.now();
-      tokens++; reply += x.piece; out.innerHTML = render(reply); $('log').scrollTop = $('log').scrollHeight;
+      tokens++; reply += x.piece; out.innerHTML = renderReply(reply); $('log').scrollTop = $('log').scrollHeight;
       if (tokens > 2) $('mSpeed').textContent = `${((tokens - 1) / ((performance.now() - tFirst) / 1000)).toFixed(1)} tok/s`;
     });
     const s = d.stats;
-    reply = d.text; out.innerHTML = render(reply);
+    reply = d.text; out.innerHTML = renderReply(reply);
     if (s.decode_tokens > 1) $('mSpeed').textContent = `${(s.decode_tokens / (s.decode_ms / 1000)).toFixed(1)} tok/s`;
     if (s.decode_tokens > 0) $('mRead').textContent = MB(s.decode_read_bytes / s.decode_tokens);
     const note = document.createElement('div'); note.className = 'note';
     note.textContent = `${s.decode_tokens} tokens · ${(s.decode_tokens / Math.max(0.001, s.decode_ms / 1000)).toFixed(1)} tok/s · prompt ${s.prompt_tokens} tokens in ${(s.prompt_ms / 1000).toFixed(1)} s`
       + (s.aborted ? ' · stopped' : '') + (s.context_full ? ' · the context is full: start a new chat' : '');
     out.append(note);
-    if (reply) messages.push({ role: 'assistant', content: reply }); else messages.pop();
+    // history keeps the answer only, as the chat templates expect
+    const answer = split(reply).answer.trim() || reply;
+    if (reply) messages.push({ role: 'assistant', content: answer }); else messages.pop();
     window.dfResult = d;
   } catch (err) { out.textContent = `Error: ${err.message}`; messages.pop(); }
   finally { busy = ''; controls(); }

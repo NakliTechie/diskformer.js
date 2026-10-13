@@ -4,7 +4,9 @@
 // (-ot exps=WebGPU_Paged, read from the GGUF), so paged and unpaged runs of one backend can be compared
 // (scripts/compare-refs.mjs).
 //
-//   node scripts/record-refs.mjs <model.gguf> <out.json> [--port 8799] [--ctx 4096] [--server <llama-server>] [--paged <slots>] [--ngl 0 (CPU)] [--no-stream]
+//   node scripts/record-refs.mjs <model.gguf> <out.json> [--port 8799] [--ctx 4096] [--server <llama-server>] [--paged <slots>] [--ngl 0 (CPU)] [--no-stream] [--raw]
+// --raw: the reply as generated, reasoning included (--reasoning-format none), as the browser driver returns it; for
+// models that reason first (gpt-oss), whose 64-token reply is otherwise empty.
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, readFileSync, writeFileSync } from 'node:fs';
@@ -69,7 +71,7 @@ async function chat(messages, maxTokens) {
   return { content, finish };
 }
 
-const server = spawn(bin, ['-m', gguf, '-ngl', ngl, '-c', String(ctx), '--port', String(port), '--jinja', '--timeout', '3600', ...(paged ? ['-ot', 'exps=WebGPU_Paged'] : [])], {
+const server = spawn(bin, ['-m', gguf, '-ngl', ngl, '-c', String(ctx), '--port', String(port), '--jinja', '--timeout', '3600', ...(paged ? ['-ot', 'exps=WebGPU_Paged'] : []), ...(rest.includes('--raw') ? ['--reasoning-format', 'none'] : [])], {
   stdio: ['ignore', 'ignore', 'pipe'],
   env: paged ? { ...process.env, GGML_WEBGPU_PAGED_SLOTS: paged, GGML_WEBGPU_PAGED_FILE: gguf } : process.env,
 });
