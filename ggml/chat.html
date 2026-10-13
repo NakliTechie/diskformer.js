@@ -17,34 +17,43 @@
   :root { --bg: #fafaf9; --fg: #1c1917; --muted: #78716c; --line: #e7e5e4; --card: #fff; --accent: #2563eb; --bad: #b91c1c; --code: #f5f5f4; }
   @media (prefers-color-scheme: dark) { :root { --bg: #161514; --fg: #e7e5e4; --muted: #a8a29e; --line: #2e2b29; --card: #1f1d1b; --accent: #60a5fa; --bad: #f87171; --code: #262321; } }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; }
-  main { max-width: 820px; margin: 0 auto; padding: 24px 16px 48px; }
-  h1 { font-size: 22px; margin: 0 0 6px; }
-  p { margin: 0 0 12px; }
+  p { margin: 0 0 10px; }
   a { color: var(--accent); }
   .muted { color: var(--muted); }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 14px 0; }
-  .row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; }
+  /* Two panes: the chat on the left, the model switcher on the right; stacked (switcher first) on a narrow screen. */
+  .app { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; max-width: 1280px; margin: 0 auto; padding: 16px; height: 100%; }
+  .pane { background: var(--card); border: 1px solid var(--line); border-radius: 10px; min-height: 0; }
+  #chat { display: flex; flex-direction: column; padding: 14px; }
+  #side { padding: 14px; overflow-y: auto; }
+  @media (max-width: 860px) { .app { grid-template-columns: minmax(0, 1fr); height: auto; padding: 10px; } #side { order: -1; } #chat { min-height: 70vh; } }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  h2 { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 16px 0 8px; }
   label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
   select, input, textarea, button { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; }
   input[type=number] { width: 90px; }
+  input[type=file] { width: 100%; min-width: 0; font-size: 13px; }
   button { cursor: pointer; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   button:disabled { opacity: .5; cursor: default; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  td { padding: 7px 6px; border-top: 1px solid var(--line); vertical-align: middle; }
-  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  td.act { text-align: right; white-space: nowrap; }
-  td.act button { margin-left: 6px; }
-  .tag { font-size: 12px; color: var(--muted); }
-  .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 10px 0 6px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
+  .mrow > div { min-width: 0; }
+  .mrow { border-top: 1px solid var(--line); padding: 9px 0; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; }
+  .mrow:first-child { border-top: 0; }
+  .mrow.on { box-shadow: inset 3px 0 0 var(--accent); padding-left: 10px; }
+  .mrow .info { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .mrow .act { grid-row: span 2; white-space: nowrap; }
+  .mrow .act button { margin-left: 4px; padding: 4px 9px; font-size: 13px; }
+  .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 12px 0 6px; }
   .bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
-  #status.bad { color: var(--bad); }
-  .meter { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
-  .meter div { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
-  .meter b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+  #status { font-size: 13px; } #status.bad { color: var(--bad); }
+  .meter { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .meter div { border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
+  .meter b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
   .meter span { font-size: 12px; color: var(--muted); }
-  #log { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+  #log { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 2px 2px 12px; }
+  #empty { margin: auto; max-width: 440px; text-align: center; }
   .msg { overflow-wrap: anywhere; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--line); }
   .msg.user { align-self: flex-end; background: var(--bg); max-width: 85%; white-space: pre-wrap; }
   .msg.model { background: var(--card); }
@@ -53,62 +62,65 @@
   .msg pre { background: var(--code); border-radius: 6px; padding: 8px 10px; overflow-x: auto; margin: 0 0 8px; }
   .msg pre code { background: none; padding: 0; }
   .msg .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
-  form { display: flex; gap: 8px; align-items: end; }
+  form { display: flex; gap: 8px; align-items: end; border-top: 1px solid var(--line); padding-top: 12px; }
   textarea { flex: 1; resize: vertical; min-height: 44px; }
-  details { font-size: 12px; color: var(--muted); } #devlog { white-space: pre-wrap; max-height: 200px; overflow: auto; font-family: ui-monospace, monospace; }
-  footer { font-size: 12px; color: var(--muted); margin-top: 24px; }
+  details { font-size: 12px; color: var(--muted); margin-top: 14px; } #devlog { white-space: pre-wrap; max-height: 200px; overflow: auto; font-family: ui-monospace, monospace; }
+  footer { font-size: 12px; color: var(--muted); margin-top: 14px; }
 </style>
 </head>
 <body>
-<main>
-  <h1>diskformer chat</h1>
-  <p>Run a mixture-of-experts model larger than your GPU memory, in this tab. The model file stays in this browser's
-    private storage on your disk (OPFS). llama.cpp's WebGPU backend keeps the dense layers and a small cache of experts
-    on the GPU; diskformer reads every other expert from the file as each token needs it.</p>
-  <p class="muted">Chrome or Edge 137 or later, with WebGPU. Nothing leaves this tab except the model download.</p>
-  <p id="framed" hidden>This page is inside a frame, where browser storage can be partitioned or capped.
-    <a id="ownTab" target="_blank" rel="noopener">Open it in its own tab</a> to store large models.</p>
-  <p id="unsupported" class="muted" hidden></p>
-
-  <section class="card">
-    <table id="models"></table>
-    <div class="row" style="margin-top:12px">
-      <label>GPU memory budget (GB) <input id="budget" type="number" min="1" step="0.5" value="4"></label>
-      <label>Context (tokens) <select id="ctx"><option>1024</option><option selected>2048</option><option>4096</option></select></label>
-      <label>A GGUF from your disk <input id="file" type="file" accept=".gguf"></label>
-    </div>
-    <div class="bar"><span id="fill"></span></div>
-    <p id="status" class="muted">Pick a model. The first time, it downloads once into this browser's storage.</p>
-  </section>
-
-  <section class="card" id="meterCard" hidden>
-    <div class="meter">
-      <div><b id="mDisk">–</b><span>model file on disk (OPFS)</span></div>
-      <div><b id="mGpu">–</b><span id="mGpuNote">on the GPU</span></div>
-      <div><b id="mSlots">–</b><span id="mSlotsNote">experts cached on the GPU</span></div>
-      <div><b id="mSpeed">–</b><span>decode speed</span></div>
-      <div><b id="mRead">–</b><span>read from disk per token</span></div>
-    </div>
-  </section>
-
-  <section id="chat" hidden>
-    <div id="log"></div>
+<div class="app">
+  <section id="chat" class="pane">
+    <div id="log"><div id="empty" class="muted">
+      <h1 style="color:var(--fg)">diskformer chat</h1>
+      <p>Run a mixture-of-experts model larger than your GPU memory, in this tab. The model file stays in this
+        browser's private storage on your disk (OPFS). llama.cpp's WebGPU backend keeps the dense layers and a small
+        cache of experts on the GPU; diskformer reads every other expert from the file as each token needs it.</p>
+      <p>Pick a model on the right. The first time, it downloads once into this browser's storage.</p>
+    </div></div>
     <form id="ask">
-      <textarea id="q" rows="2" placeholder="Ask something"></textarea>
+      <textarea id="q" rows="2" placeholder="Load a model to start"></textarea>
       <button class="primary" id="send">Send</button>
       <button type="button" id="stop" disabled>Stop</button>
       <button type="button" id="clear">New chat</button>
     </form>
   </section>
 
-  <details><summary>llama.cpp log</summary><div id="devlog"></div></details>
-  <footer>Greedy decoding, so the same question gets the same answer. Built on
-    <a href="https://github.com/NakliTechie/diskformer.js">diskformer.js</a> and
-    <a href="https://github.com/ggml-org/llama.cpp">llama.cpp</a>'s WebGPU backend, with expert paging from the
-    <a href="https://github.com/NakliTechie/llama.cpp/tree/webgpu-disk-tier">webgpu-disk-tier</a> branch.
-    Each model is downloaded from Hugging Face under its own license.
-    The earlier hand-written engines: <a href="classic/index.html">classic page</a>.</footer>
-</main>
+  <aside id="side" class="pane">
+    <h1>Models</h1>
+    <p class="muted" style="font-size:13px">Chrome or Edge 137 or later, with WebGPU. Nothing leaves this tab except the model download.</p>
+    <p id="framed" hidden style="font-size:13px">This page is inside a frame, where browser storage can be partitioned or capped.
+      <a id="ownTab" target="_blank" rel="noopener">Open it in its own tab</a> to store large models.</p>
+    <p id="unsupported" class="muted" hidden></p>
+    <div id="models"></div>
+    <div class="row" style="margin-top:10px">
+      <label>GPU budget (GB) <input id="budget" type="number" min="1" step="0.5" value="4"></label>
+      <label>Context <select id="ctx"><option>1024</option><option selected>2048</option><option>4096</option></select></label>
+    </div>
+    <label style="margin-top:10px">Or a GGUF from your disk <input id="file" type="file" accept=".gguf"></label>
+    <div class="bar"><span id="fill"></span></div>
+    <p id="status" class="muted">No model loaded.</p>
+
+    <div id="meterCard" hidden>
+      <h2>This model</h2>
+      <div class="meter">
+        <div><b id="mDisk">–</b><span>file on disk (OPFS)</span></div>
+        <div><b id="mGpu">–</b><span id="mGpuNote">on the GPU</span></div>
+        <div><b id="mSlots">–</b><span id="mSlotsNote">experts cached on the GPU</span></div>
+        <div><b id="mSpeed">–</b><span>decode speed</span></div>
+        <div><b id="mRead">–</b><span>read from disk per token</span></div>
+      </div>
+    </div>
+
+    <details><summary>llama.cpp log</summary><div id="devlog"></div></details>
+    <footer>Greedy decoding, so the same question gets the same answer. Built on
+      <a href="https://github.com/NakliTechie/diskformer.js">diskformer.js</a> and
+      <a href="https://github.com/ggml-org/llama.cpp">llama.cpp</a>'s WebGPU backend, with expert paging from the
+      <a href="https://github.com/NakliTechie/llama.cpp/tree/webgpu-disk-tier">webgpu-disk-tier</a> branch.
+      Each model is downloaded from Hugging Face under its own license.
+      The earlier hand-written engines: <a href="classic/index.html">classic page</a>.</footer>
+  </aside>
+</div>
 
 <script type="module">
 // Models with a recorded gate on this path (examples/chat/refs, plan/width-2026-10-13.md). Sizes are the exact
@@ -159,19 +171,19 @@ function renderModels() {
   const byName = Object.fromEntries(stored.map((m) => [m.name, m]));
   const rows = [...CATALOG, ...stored.filter((m) => !CATALOG.some((c) => c.name === m.name)).map((m) => ({ name: m.name, label: m.name, note: 'your file', size: m.size }))];
   $('models').replaceChildren(...rows.map((m) => {
-    const s = byName[m.name], tr = document.createElement('tr');
-    const cell = (html, cls) => { const td = tr.insertCell(); td.innerHTML = html; if (cls) td.className = cls; return td; };
-    cell(`<b>${m.label}</b><br><span class="tag">${m.note}</span>`);
-    cell(GB(m.size), 'num');
+    const s = byName[m.name], el = document.createElement('div');
+    el.className = 'mrow' + (loaded && loaded.name === m.name ? ' on' : '');
     const state = !s ? 'not stored' : s.partial ? `${GB(s.size)} of ${GB(m.size)} stored` : 'stored';
-    cell(`<span class="tag">${state}</span>`, 'num');
-    const act = cell('', 'act');
+    const name = document.createElement('div'); name.innerHTML = `<b>${m.label}</b>`;
+    const act = document.createElement('div'); act.className = 'act';
+    const info = document.createElement('div'); info.className = 'info'; info.textContent = `${GB(m.size)} · ${state} · ${m.note}`;
     const btn = (label, fn, cls, key) => { const b = document.createElement('button'); b.textContent = label; if (cls) b.className = cls; if (key) b.dataset.act = key; b.onclick = fn; act.append(b); };
     if (busy === 'download' && current === m.name) btn('Stop', () => worker.postMessage({ type: 'abort' }), '', 'stop');
     else if (s && !s.partial) btn(loaded && loaded.name === m.name ? 'Loaded' : 'Load', () => load(m), 'primary');
     else if (m.url && supported) btn(s ? 'Resume' : 'Download', () => download(m), 'primary');
     if (s) btn('Remove', () => remove(m));
-    return tr;
+    el.append(name, act, info);
+    return el;
   }));
   controls();
 }
@@ -208,7 +220,7 @@ async function restartWorker() {
   worker.terminate();
   worker = new Worker(new URL('./worker.mjs', import.meta.url), { type: 'module' });
   worker.onmessage = ({ data }) => onMsg(data);
-  loaded = null; $('chat').hidden = true; $('meterCard').hidden = true;
+  loaded = null; $('meterCard').hidden = true; clearChat();
 }
 
 async function load(m, file) {
@@ -233,10 +245,10 @@ async function load(m, file) {
     $('mSlots').textContent = `${d.slots} of ${p.n_expert}`;
     $('mSlotsNote').textContent = `experts per layer cached on the GPU; ${p.n_used} used per token`;
     $('mSpeed').textContent = '–'; $('mRead').textContent = '–';
-    $('meterCard').hidden = false; $('chat').hidden = false;
+    $('meterCard').hidden = false; $('q').placeholder = `Ask ${loaded.label} something`;
     fill(1);
     status(`Loaded ${loaded.label} in ${((performance.now() - t0) / 1000).toFixed(1)} s: ${GB(d.size)} on disk, ${GB(gpu)} on the GPU.`);
-    messages = []; $('log').replaceChildren();
+    clearChat();
     window.dfLoaded = d;
   } catch (e) {
     const m2 = /budget .* does not hold/.test(e.message) ? `${e.message}. Raise the GPU memory budget.` : `Could not load: ${e.message}`;
@@ -244,14 +256,14 @@ async function load(m, file) {
   } finally { busy = ''; await refresh(); }
 }
 
-// Plain text with paragraphs, **bold**, `code` and ``` blocks; everything else escaped.
+// Plain text with paragraphs, **bold**, *italic*, `code` and ``` blocks; everything else escaped.
 function render(text) {
   const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
   return text.split(/```/).map((part, i) => i % 2
     ? `<pre><code>${esc(part.replace(/^[\w-]*\n/, ''))}</code></pre>`
-    : part.split(/\n{2,}/).filter((p) => p.trim()).map((p) => `<p>${esc(p).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\n/g, '<br>')}</p>`).join('')).join('');
+    : part.split(/\n{2,}/).filter((p) => p.trim()).map((p) => `<p>${esc(p).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\*(?=\S)([^*\n]+?)\*/g, '<i>$1</i>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\n/g, '<br>')}</p>`).join('')).join('');
 }
-function bubble(role, text) { const d = document.createElement('div'); d.className = `msg ${role}`; if (role === 'user') d.textContent = text; else d.innerHTML = render(text); $('log').append(d); return d; }
+function bubble(role, text) { $('empty').hidden = true; const d = document.createElement('div'); d.className = `msg ${role}`; if (role === 'user') d.textContent = text; else d.innerHTML = render(text); $('log').append(d); $('log').scrollTop = $('log').scrollHeight; return d; }
 
 $('ask').onsubmit = async (e) => {
   e.preventDefault();
@@ -267,7 +279,7 @@ $('ask').onsubmit = async (e) => {
     const d = await send({ type: 'chat', messages, n: 512 }, ['done'], (x) => {
       if (x.type !== 'piece') return;
       if (!tokens) tFirst = performance.now();
-      tokens++; reply += x.piece; out.innerHTML = render(reply);
+      tokens++; reply += x.piece; out.innerHTML = render(reply); $('log').scrollTop = $('log').scrollHeight;
       if (tokens > 2) $('mSpeed').textContent = `${((tokens - 1) / ((performance.now() - tFirst) / 1000)).toFixed(1)} tok/s`;
     });
     const s = d.stats;
@@ -284,7 +296,8 @@ $('ask').onsubmit = async (e) => {
   finally { busy = ''; controls(); }
 };
 $('stop').onclick = () => worker.postMessage({ type: 'abort' });
-$('clear').onclick = () => { messages = []; $('log').replaceChildren(); };
+function clearChat() { messages = []; $('log').replaceChildren($('empty')); $('empty').hidden = false; }
+$('clear').onclick = clearChat;
 $('q').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('ask').requestSubmit(); } };
 $('file').onchange = () => { const f = $('file').files[0]; if (f) load(null, f); };
 
