@@ -14,8 +14,8 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://diskformer.naklitechie.com/social.png">
 <style>
-  :root { --bg: #fafaf9; --fg: #1c1917; --muted: #78716c; --line: #e7e5e4; --card: #fff; --accent: #2563eb; --bad: #b91c1c; --code: #f5f5f4; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #161514; --fg: #e7e5e4; --muted: #a8a29e; --line: #2e2b29; --card: #1f1d1b; --accent: #60a5fa; --bad: #f87171; --code: #262321; } }
+  /* One palette, whatever the OS theme: dull cream with blue accents. */
+  :root { color-scheme: light; --bg: #efe8d8; --fg: #2b2720; --muted: #776f61; --line: #ddd2bc; --card: #f8f3e7; --accent: #2f5d9e; --accent-soft: #dfe6ef; --bad: #a3392b; --code: #ebe3d1; }
   * { box-sizing: border-box; }
   html, body { height: 100%; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; }
@@ -55,7 +55,7 @@
   #log { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 2px 2px 12px; }
   #empty { margin: auto; max-width: 440px; text-align: center; }
   .msg { overflow-wrap: anywhere; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--line); }
-  .msg.user { align-self: flex-end; background: var(--bg); max-width: 85%; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: var(--accent-soft); border-color: #c9d5e5; max-width: 85%; white-space: pre-wrap; }
   .msg.model { background: var(--card); }
   .msg.model p { margin: 0 0 8px; } .msg.model p:last-child { margin: 0; }
   .msg code { background: var(--code); border-radius: 4px; padding: 1px 4px; font-size: 13px; }
