@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1 (2026-10-13)
+- Docs only: the README now leads with the llama.cpp path (Qwen3-Next 80B-A3B, a 48 GB file, in under 5 GB of GPU
+  memory; OLMoE and LFM2 in real time) and the recording. No code changes.
+
 ## 0.4.0 (2026-10-13)
 - Changed: errors are now `DiskformerError`s with a `code` (see below). A caller that checked `e.name === 'AbortError'`
   after an aborted ingest should check `isDiskformerError(e, 'LOAD_ABORTED')`; messages are unchanged.
