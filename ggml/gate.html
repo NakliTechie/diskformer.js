@@ -9,7 +9,7 @@
   body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 ui-monospace, monospace; }
   main { max-width: 900px; margin: 0 auto; padding: 24px 16px; } pre { white-space: pre-wrap; }
 </style>
-<main><pre id="out">gate: ?model=&lt;GGUF name in OPFS&gt;&amp;refs=&lt;json&gt;&amp;slots=N</pre></main>
+<main><pre id="out">gate: ?model=&lt;GGUF name in OPFS&gt;&amp;refs=&lt;json&gt;&amp;slots=N [&amp;url=&lt;GGUF URL&gt;&amp;size=&lt;bytes&gt;: copy it into OPFS first]</pre></main>
 <script type="module">
   // Replays llama.cpp's replies (examples/chat/refs/*.json) through llama.cpp + WebGPU_Paged in this tab.
   const q = new URLSearchParams(location.search);
@@ -26,13 +26,20 @@
     worker.onmessage = ({ data }) => {
       if (data.type === 'log' && /ggml_webgpu paged/.test(data.line)) window.gateLog.push(data.line);
       if (data.type === 'error') reject(new Error(data.message));
-      else if (data.type === 'loaded' || data.type === 'done') resolve(data);
+      else if (data.type === 'loaded' || data.type === 'done' || data.type === 'downloaded') resolve(data);
     };
   });
   out.textContent = `model ${q.get('model')} · ${q.get('budget') ? `budget ${q.get('budget')} GB` : `slots ${q.get('slots')}`}`;
   // env=NAME=value,NAME=value: settings for llama.cpp / ggml-webgpu
   const env = Object.fromEntries((q.get('env') || '').split(',').filter(Boolean).map((kv) => kv.split('=')));
   out.textContent += env && Object.keys(env).length ? ` · ${q.get('env')}` : '';
+  // a failed step ends the gate with an error instead of leaving it waiting (scripts/chrome-gate.mjs reads window.gate)
+  window.onunhandledrejection = (e) => { say(`error: ${e.reason && e.reason.message}`); window.gate = { error: String(e.reason && e.reason.message) }; };
+  if (q.get('url')) {
+    worker.postMessage({ type: 'download', url: q.get('url'), name: q.get('model'), size: +q.get('size') });
+    const d = await next();
+    say(`in OPFS (${d.ms ? `copied in ${(d.ms / 1000).toFixed(1)} s` : 'already there'})`);
+  }
   // budget=<GB> plans the slots from a GPU budget; slots=<n> sets them directly
   worker.postMessage({ type: 'load', opfsName: q.get('model'), slots: +q.get('slots'), budget: q.get('budget') ? +q.get('budget') * 1e9 : 0, env });
   const loaded = await next();
