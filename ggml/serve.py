@@ -1,14 +1,33 @@
 # Serves the repo root for ggml/chat.html and ggml/gate.html with caching off, so a rebuilt wasm or edited worker is
 # always the one that runs: python3 ggml/serve.py [port] [root]
-# Range requests are answered (206), and any origin may read, so a page on another local port can copy a GGUF from
+# Range requests are answered (206), and pages on localhost / 127.0.0.1 (any port) may read, so a page on another local port can copy a GGUF from
 # disk into its OPFS with the worker's chunked downloader, e.g. python3 ggml/serve.py 8798 ~/models then
 # download {url: 'http://127.0.0.1:8798/width3/<file>.gguf'} from the page on :8797.
 import functools, http.server, os, re, sys
 
+# Only this machine: a page on another site may not read what this serves (it can include .git/ and plan/), and a
+# request whose Host is not local (DNS rebinding) is refused. No directory listings.
+LOCAL = re.compile(r'(localhost|127\.0\.0\.1)(:\d+)?')
+
 class NoStore(http.server.SimpleHTTPRequestHandler):
+    def parse_request(self):
+        if not super().parse_request():
+            return False
+        if not LOCAL.fullmatch(self.headers.get('Host', '')):
+            self.send_error(403, 'local hosts only')
+            return False
+        return True
+
+    def list_directory(self, path):
+        self.send_error(404)
+        return None
+
     def end_headers(self):
         self.send_header('Cache-Control', 'no-store')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        origin = self.headers.get('Origin', '')
+        if re.fullmatch(r'https?://' + LOCAL.pattern, origin):
+            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Vary', 'Origin')
         self.send_header('Access-Control-Allow-Headers', 'Range')
         self.send_header('Access-Control-Expose-Headers', 'Content-Range, Content-Length')
         self.send_header('Accept-Ranges', 'bytes')

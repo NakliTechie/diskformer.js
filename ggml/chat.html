@@ -177,7 +177,7 @@ function renderModels() {
     const s = byName[m.name], el = document.createElement('div');
     el.className = 'mrow' + (loaded && loaded.name === m.name ? ' on' : '');
     const state = !s ? 'not stored' : s.partial ? `${GB(s.size)} of ${GB(m.size)} stored` : 'stored';
-    const name = document.createElement('div'); name.innerHTML = `<b>${m.label}</b>`;
+    const name = document.createElement('div'); name.append(Object.assign(document.createElement('b'), { textContent: m.label }));  // a stored file's own name: text, never markup
     const act = document.createElement('div'); act.className = 'act';
     const info = document.createElement('div'); info.className = 'info'; info.textContent = `${GB(m.size)} · ${state} · ${m.note}`;
     const btn = (label, fn, cls, key) => { const b = document.createElement('button'); b.textContent = label; if (cls) b.className = cls; if (key) b.dataset.act = key; b.onclick = fn; act.append(b); };

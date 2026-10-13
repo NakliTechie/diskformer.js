@@ -152,7 +152,9 @@ async function load() {
   try {
     if (engine) { const old = engine; engine = null; await old.dispose(); }
     engine = await m.Engine.load(null, {
-      url: q.get('url') || undefined, root: ROOT, gpuBudgetBytes: budgetGB * 1e9, maxCtx,
+      // a model URL from the address bar only on this machine: on a deployed copy a crafted link could store other
+      // weights under this model's name
+      url: (['localhost', '127.0.0.1'].includes(location.hostname) && q.get('url')) || undefined, root: ROOT, gpuBudgetBytes: budgetGB * 1e9, maxCtx,
       onProgress: (e) => {
         if (e.status === 'ingest-plan' && e.quota && e.quota - (e.usage || 0) < e.needed)
           status(`Needs ${GB(e.needed)} of storage; the browser grants ${GB(e.quota - (e.usage || 0))} so far and raises that as the download writes, while the disk has room.`);
