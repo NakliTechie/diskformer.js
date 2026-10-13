@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+- Coded errors (`src/errors.js`): `DiskformerError` with a `code`, checked by name and code through
+  `isDiskformerError(e, code)`. `ingestGguf` throws `LOAD_ABORTED` when its signal aborted, else `LOAD_FAILED` with the
+  original as `cause`.
+- `readStore(key)` and `listStores()`: a store is complete only when every file it names is on disk at full size;
+  zero-byte or short files left by a crash make it `invalid`. `examples/chat` lists the stored models and removes one
+  at a time.
+- `engines/`: `UNSUPPORTED_DEVICE`, `BUDGET_TOO_SMALL` (with the bytes in `detail`), `CONTEXT_FULL`,
+  `EXECUTION_FAILED`, `RESOURCE_DISPOSED`. `generate()` and `greedy()` on one engine run one at a time (they share the
+  KV cache); `dispose()` waits for the step in flight. A load that fails destroys its GPU device. An invalid store is
+  ingested again instead of loaded.
+- Gates that run from this repo: `test/browser/greedy.html` (token by token vs llama.cpp, references in `test/refs/`),
+  `test/browser/states.html` + `test/state-check.py` (per-layer states vs LocalMind's numpy pass).
+
 ## 0.3.0 (2026-10-07)
 - `fileFetch(blob)`: ingest a GGUF that is already on disk (a `File` the user picked, e.g. from a Hugging Face or
   LM Studio cache) through `ingestGguf({ fetch: fileFetch(file) })`, with no download. The store is byte-identical to a

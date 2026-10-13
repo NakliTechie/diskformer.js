@@ -30,7 +30,7 @@ try {
   let abortedAt = 0, error = null;
   await ingestGguf({ url, key: 'resumed', root, plan, signal: ctrl.signal, onProgress: (e) => {
     if (e.status === 'ingest' && !abortedAt && e.loaded > 0.6 * e.total) { abortedAt = e.loaded / e.total; ctrl.abort(); }
-  } }).catch((e) => { error = e.name; });
+  } }).catch((e) => { error = e.code || e.name; });
   log(`aborted at ${(100 * abortedAt).toFixed(1)}% (${error}); resuming`);
   let resumed = null, firstLoaded = null;
   const m = await ingestGguf({ url, key: 'resumed', root, plan, onProgress: (e) => {

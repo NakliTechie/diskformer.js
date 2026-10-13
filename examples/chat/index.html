@@ -48,6 +48,10 @@
   .msg.model { background: var(--card); }
   form { display: flex; gap: 8px; align-items: end; }
   textarea { flex: 1; resize: vertical; min-height: 44px; }
+  #stores { width: 100%; border-collapse: collapse; font-size: 14px; }
+  #stores td { padding: 5px 6px; border-top: 1px solid var(--line); }
+  #stores td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  #stores .bad { color: var(--bad); }
   footer { font-size: 12px; color: var(--muted); margin-top: 24px; }
 </style>
 </head>
@@ -71,6 +75,11 @@
     </div>
     <div class="bar"><span id="fill"></span></div>
     <p id="status" class="muted">Pick a model and a budget. The first load downloads it; later loads take seconds.</p>
+  </section>
+
+  <section class="card" id="storesCard" hidden>
+    <p class="muted">Models in this browser's storage. Removing one keeps the others.</p>
+    <table id="stores"></table>
   </section>
 
   <section class="card" id="meterCard" hidden>
@@ -98,7 +107,8 @@
 <script type="module">
 import { Gemma4MoeSsd, GEMMA4_26B_A4B } from '../../engines/gemma4_moe_ssd.js';
 import { Qwen35MoeSsd, QWEN36_35B_A3B } from '../../engines/qwen35_moe_ssd.js';
-import { removeStore, storeKey } from '../../src/ingest.js';
+import { removeStore, storeKey, listStores } from '../../src/ingest.js';
+import { isDiskformerError } from '../../src/errors.js';
 
 // ?model=gemma|qwen  ?budget=GB  ?ctx=tokens  ?url=GGUF (a local copy)  ?root=OPFS folder  ?gate=refs.json
 const MODELS = {
@@ -124,6 +134,7 @@ addEventListener('error', (e) => status(`Error: ${e.message}`, true));
 addEventListener('unhandledrejection', (e) => status(`Error: ${e.reason && e.reason.message || e.reason}`, true));
 const controls = () => {
   for (const id of ['load', 'remove', 'model']) $(id).disabled = !!busy;
+  for (const b of $('stores').querySelectorAll('button')) b.disabled = !!busy;
   $('send').disabled = !!busy || !engine; $('stop').disabled = busy !== 'reply';
 };
 // The OPFS folder a model's store lives in: the loaded engine's, else the name the engine would give it.
@@ -166,8 +177,13 @@ async function load() {
     status(`Loaded in ${((performance.now() - t0) / 1000).toFixed(1)} s. ${GB(disk)} in OPFS; ${GB(used)} on the GPU.`);
     messages = []; $('log').replaceChildren();
     return { model: $('model').value, budgetGB, maxCtx, modelBytes: m.source.size, diskBytes: disk, gpuBytes: used, gpuBytesByKind: { ...engine.gpuBytes }, poolSlots: engine.poolSlots, experts: c.layers * c.experts };
-  } catch (e) { status(`Could not load: ${e.message}`, true); throw e; }
-  finally { busy = ''; controls(); }
+  } catch (e) {
+    if (isDiskformerError(e, 'BUDGET_TOO_SMALL')) status(`${e.message}. Raise the budget to at least ${Math.ceil((e.detail.fixed + e.detail.minCache) / 1e8) / 10} GB.`, true);
+    else if (isDiskformerError(e, 'LOAD_ABORTED')) status('Load stopped. The next load resumes the download where it stopped.');
+    else status(`Could not load: ${e.message}`, true);
+    throw e;
+  }
+  finally { busy = ''; controls(); showStores(); }
 }
 
 // One reply, streamed into onText. Returns the text, its timing, and whether `signal` stopped it.
@@ -184,21 +200,40 @@ async function reply(history, { maxNewTokens = 1024, onText = () => {}, signal }
 
 function bubble(role, text) { const d = document.createElement('div'); d.className = `msg ${role}`; d.textContent = text; $('log').append(d); return d; }
 
-$('load').onclick = () => load().catch(() => {});
-$('remove').onclick = async () => {
+// The stores under ROOT, each with its size and state and its own Remove button.
+const STATE = { complete: 'ready', partial: 'download not finished', invalid: 'damaged, will download again' };
+async function showStores() {
+  let stores = [];
+  try { stores = (await listStores({ root: ROOT })).filter((s) => s.state !== 'missing'); } catch (_) {}
+  $('storesCard').hidden = !stores.length;
+  $('stores').replaceChildren(...stores.map((st) => {
+    const tr = document.createElement('tr'), cell = (t, cls) => { const td = tr.insertCell(); td.textContent = t; if (cls) td.className = cls; return td; };
+    const src = st.manifest && st.manifest.source;
+    cell((src && src.file) || st.key);
+    cell(GB(st.bytes), 'num');
+    cell(STATE[st.state] + (st.state === 'invalid' && st.problem ? ` (${st.problem})` : ''), st.state === 'complete' ? '' : 'bad');
+    const b = document.createElement('button'); b.textContent = 'Remove'; b.disabled = !!busy;
+    b.onclick = () => removeOne(st.key, (src && src.file) || st.key);
+    tr.insertCell().append(b);
+    return tr;
+  }));
+}
+async function removeOne(key, name) {
   if (busy) return;
   busy = 'remove'; controls();
-  const m = pick(), key = keyOf(m), name = m.label.split(' · ')[0];
   try {
-    if (engine) { const old = engine; engine = null; await old.dispose(); }
-    $('chat').hidden = true; $('meterCard').hidden = true; fill(0);
+    if (engine && engine.opts.key === key) { const old = engine; engine = null; await old.dispose(); $('chat').hidden = true; $('meterCard').hidden = true; fill(0); }
     await removeStore(key, { root: ROOT });
     status(`Removed ${name} from this browser's storage.`);
   } catch (e) {
     if (e.name === 'NotFoundError') status(`${name} is not in this browser's storage.`);
     else status(`Could not remove ${name}: ${e.message}`, true);
-  } finally { busy = ''; controls(); }
-};
+  } finally { busy = ''; controls(); showStores(); }
+}
+showStores();
+
+$('load').onclick = () => load().catch(() => {});
+$('remove').onclick = () => { const m = pick(); return removeOne(keyOf(m), m.label.split(' · ')[0]); };
 $('stop').onclick = () => { if (ctrl) ctrl.abort(); };
 $('q').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('ask').requestSubmit(); } };
 $('ask').onsubmit = async (e) => {

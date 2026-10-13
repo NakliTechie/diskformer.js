@@ -94,9 +94,9 @@ const cleanB = fakeIo(); assert.ok((await run(cleanB, b)).m.complete); const ref
 {
   const fs = fakeIo();
   const r1 = await run(fs, a, { abortAt: 0.55 });
-  assert.equal(r1.error.name, 'AbortError'); assert.equal(fs.openCount(), 0);
+  assert.equal(r1.error.code, 'LOAD_ABORTED'); assert.equal(fs.openCount(), 0);
   const r2 = await run(fs, a, { abortAt: 0.85 });
-  assert.equal(r2.error.name, 'AbortError'); assert.equal(fs.openCount(), 0);
+  assert.equal(r2.error.code, 'LOAD_ABORTED'); assert.equal(fs.openCount(), 0);
   const resumed2 = r2.events.find((e) => e.status === 'ingest-resume');
   assert.ok(resumed2 && resumed2.unit > 0, 'the second run resumes');
   const r3 = await run(fs, a);
@@ -110,7 +110,7 @@ const cleanB = fakeIo(); assert.ok((await run(cleanB, b)).m.complete); const ref
 // Same header, new ETag (the file changed): start over, never mix the two.
 {
   const fs = fakeIo();
-  assert.equal((await run(fs, a, { abortAt: 0.6 })).error.name, 'AbortError');
+  assert.equal((await run(fs, a, { abortAt: 0.6 })).error.code, 'LOAD_ABORTED');
   const r = await run(fs, b, { etag: 'e2' });
   assert.ok(!r.events.some((e) => e.status === 'ingest-resume'), 'a changed source does not resume');
   assert.deepEqual(bytes(fs), refB);
@@ -118,11 +118,13 @@ const cleanB = fakeIo(); assert.ok((await run(cleanB, b)).m.complete); const ref
 // A failed open and a failed final write leave nothing open.
 {
   const fs = fakeIo(); fs.fail.open = 'experts.bin';
-  assert.match((await run(fs, a)).error.message, /cannot open/); assert.equal(fs.openCount(), 0);
+  const e = (await run(fs, a)).error;
+  assert.equal(e.code, 'LOAD_FAILED'); assert.match(e.cause.message, /cannot open/); assert.equal(fs.openCount(), 0);
 }
 {
   const fs = fakeIo(); fs.fail.writeAt = N / 2 - UNIT;          // the last unit of experts.bin
-  assert.match((await run(fs, a)).error.message, /write failed/); assert.equal(fs.openCount(), 0);
+  const e = (await run(fs, a)).error;
+  assert.equal(e.code, 'LOAD_FAILED'); assert.match(e.message, /write failed/); assert.equal(fs.openCount(), 0);
 }
 // A local file as the source (fileFetch over a Blob): the same store as the download, byte for byte; an abort
 // resumes from the same file; a download's interrupted state is not resumed from a file (no ETag to match).
@@ -136,12 +138,12 @@ const cleanB = fakeIo(); assert.ok((await run(cleanB, b)).m.complete); const ref
   const fs = fakeIo();
   assert.ok((await runFile(fs, a)).m.complete); assert.deepEqual(bytes(fs), refA); assert.equal(fs.openCount(), 0);
   const fs2 = fakeIo();
-  assert.equal((await runFile(fs2, a, { abortAt: 0.5 })).error.name, 'AbortError'); assert.equal(fs2.openCount(), 0);
+  assert.equal((await runFile(fs2, a, { abortAt: 0.5 })).error.code, 'LOAD_ABORTED'); assert.equal(fs2.openCount(), 0);
   const r = await runFile(fs2, a);
   assert.ok(r.events.some((e) => e.status === 'ingest-resume'), 'a file ingest resumes from the same file');
   assert.deepEqual(bytes(fs2), refA);
   const fs3 = fakeIo();
-  assert.equal((await run(fs3, a, { abortAt: 0.5 })).error.name, 'AbortError');
+  assert.equal((await run(fs3, a, { abortAt: 0.5 })).error.code, 'LOAD_ABORTED');
   const r3 = await runFile(fs3, a);
   assert.ok(!r3.events.some((e) => e.status === 'ingest-resume'), 'a download is not resumed from a file');
   assert.deepEqual(bytes(fs3), refA);
@@ -150,4 +152,4 @@ const cleanB = fakeIo(); assert.ok((await run(cleanB, b)).m.complete); const ref
   assert.equal(r206.status, 206); assert.equal(r206.headers.get('content-range'), 'bytes 4-9/10'); assert.equal((await r206.arrayBuffer()).byteLength, 6);
   assert.equal((await ff('x', { headers: { Range: 'bytes=10-19' } })).status, 416);
 }
-console.log('ingest-resume: ok (abort + abort during resume + finish = clean bytes; changed source starts over; failures close every file; a local file ingests the same bytes and resumes from itself)');
+console.log('ingest-resume: ok (abort + abort during resume + finish = clean bytes; changed source starts over; failures close every file; errors carry LOAD_ABORTED / LOAD_FAILED; a local file ingests the same bytes and resumes from itself)');

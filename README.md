@@ -58,9 +58,8 @@ The first load downloads the GGUF from Hugging Face into OPFS, in the engine's l
 
 ## Why
 
-Your model does not fit on the GPU, or it fits only by crowding out everything else. Browser engines load every
-weight onto the GPU at load time, including the ones a step never touches. A mixture-of-experts model uses under a
-tenth of its weights per token. Gemma 4's per-layer embedding table is read one row per token.
+Your model does not fit on the GPU, or fits only by crowding out everything else. Browser engines load every weight
+at load time, though a mixture-of-experts model uses under a tenth of its weights per token.
 
 diskformer keeps those weights in OPFS, read through sync access handles in workers. Only what each step needs
 moves into a GPU cache. The core is the store and the residency layer: your engine keeps its own kernels and decides
@@ -71,9 +70,8 @@ what a step needs. `engines/` shows two complete engines built on it.
 `engines/gemma4_moe_ssd.js` runs Gemma 4 26B-A4B. `engines/qwen35_moe_ssd.js` runs Qwen3.6 35B-A3B, and
 `engines/qwen3_moe_ssd.js` runs Qwen3-30B-A3B as their base. They are from-scratch WebGPU engines. The dense layers and
 KV cache live on the GPU. The experts stream from OPFS into a GPU cache, sized by `gpuBudgetBytes`. A budget that
-cannot hold the dense part and two tokens' experts is refused with the numbers. Decoding is greedy. The kernels are
-ported from gemma4-webgpu (Apache-2.0, `engines/NOTICE`). The engine files are LocalMind's, kept in step by
-`scripts/sync-localmind.mjs`.
+cannot hold the dense part and two tokens' experts is refused with the numbers. Decoding is greedy, one `generate()`
+at a time per engine. Kernels: gemma4-webgpu (Apache-2.0, `engines/NOTICE`); files kept in step with LocalMind.
 
 ## A table on disk
 
@@ -90,6 +88,10 @@ as `fetch: fileFetch(file)`: no download, same store. `ExpertStreamer` (also `Re
 of expert records: `ensure(layer, ids)` returns pinned slots, `prefetch(layer, guesses)` never blocks, and uploads go
 through a mapped staging ring.
 
+`listStores()` lists the stored models with size and state; a store with zero-byte or short files (a crash) is
+`invalid` and is ingested again, never loaded. `removeStore(key)` removes one and keeps the rest. Errors carry a `code`
+(`LOAD_ABORTED`, `BUDGET_TOO_SMALL`, … in `src/errors.js`), checked with `isDiskformerError(e, code)`.
+
 `measure({ path, recordBytes })` reports sequential MB/s and random record reads; OPFS speed varies by machine.
 
 ## Commands
@@ -101,17 +103,15 @@ node examples/run-demo.mjs embedding         # lookup → slots → a WGSL gathe
 node examples/run-demo.mjs chat --budget 2.5 # downloads Gemma once (14.4 GB) to a fixed profile, replays 9 llama.cpp replies, fails on any difference
 node examples/run-demo.mjs test/browser/ingest-resume.html --models <dir> --file <gguf>   # abort, resume, compare bytes
 node examples/run-demo.mjs test/browser/server.html --models <dir> --file <any file>   # the runner's file server rejects bad requests
+node examples/run-demo.mjs test/browser/greedy.html --models <dir> --file <gguf> --ref test/refs/<ref>.json   # token by token vs llama.cpp
+node examples/run-demo.mjs test/browser/states.html --models <dir> --file g4-6l.gguf   # per-layer states; then test/state-check.py
 npm run sync                                 # the files shared with LocalMind match their sources
 ```
 
-## Verify it yourself
+The chat gate replays `examples/chat/refs/gemma.json` (llama.cpp's replies) under a GPU budget; any differing reply
+exits 1. `--models <dir>` serves a local GGUF; `--site <url>` gates a deployed copy, such as the Space.
 
-`node examples/run-demo.mjs chat` runs the chat page in headless Chrome under a GPU budget and replays
-`examples/chat/refs/gemma.json` (llama.cpp's replies); any differing reply exits 1. `--models <dir>` serves a local
-GGUF instead of downloading it; `--site <url>` gates a deployed copy, such as the Space.
-
-The code runs in [LocalMind](https://github.com/NakliTechie/LocalMind) on its live site. `src/` (all but `measure.js`)
-and `engines/` are byte-identical to LocalMind's copies, apart from the engines' import paths.
+The code runs in [LocalMind](https://github.com/NakliTechie/LocalMind); `src/` and `engines/` are its copies.
 
 ## License
 

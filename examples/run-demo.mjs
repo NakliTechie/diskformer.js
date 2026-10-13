@@ -1,6 +1,7 @@
 // Runs an example in headless Chrome and prints window.result. Serves the repo itself on a free port.
 //   node examples/run-demo.mjs [rows|embedding] [--profile dir]
 //   node examples/run-demo.mjs test/browser/<page>.html [--models dir --file name.gguf]   a browser test page
+//                                   [--ref test/refs/x.json | name --engine gemma|qwen35|qwen3]   greedy.html: llama.cpp's reference
 //   node examples/run-demo.mjs chat [--model gemma|qwen] [--budget GB] [--ctx N] [--models dir] [--root name]
 //                                   [--profile dir] [--port N]   (defaults: ~/.cache/diskformer-chat-profile, 8191)
 //                                   [--site URL]   gate a deployed copy of the page (e.g. the HF Space) instead
@@ -70,6 +71,8 @@ const ev = async (expression) => { const r = await send('Runtime.evaluate', { ex
 
 let url = page ? `http://127.0.0.1:${port}/${page}` : `http://127.0.0.1:${port}/examples/${example}/index.html`, minutes = page ? 30 : 3;
 if (page && models && arg('file')) url += `?url=/models/${encodeURIComponent(arg('file'))}`;
+// --ref: a path in this repo (test/refs/…) or a file name in --models.
+if (page && models && arg('ref')) url += `&ref=${arg('ref').includes('/') ? '/' + arg('ref') : `/models/${encodeURIComponent(arg('ref'))}`}&engine=${arg('engine', 'gemma')}${arg('root') ? `&root=${arg('root')}` : ''}`;
 if (chat) {
   const model = arg('model', 'gemma');
   const file = { gemma: 'gemma-4-26B_q4_0-it.gguf', qwen: 'Qwen3.6-35B-A3B-Q8_0.gguf' }[model];

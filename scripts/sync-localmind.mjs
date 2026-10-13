@@ -14,10 +14,10 @@ const lm = i > 0 ? process.argv[i + 1] : process.env.LOCALMIND || join(homedir()
 const write = process.argv.includes('--write');
 const lmSrc = join(lm, 'src');
 
-const STORE = [['opfs-reader.js', 'opfs-reader.js'], ['expert-stream.js', 'moe-expert-stream.js'], ['rows.js', 'rows.js'], ['gguf.js', 'gguf.js'], ['ingest.js', 'ingest.js']];
+const STORE = [['opfs-reader.js', 'opfs-reader.js'], ['expert-stream.js', 'moe-expert-stream.js'], ['rows.js', 'rows.js'], ['gguf.js', 'gguf.js'], ['ingest.js', 'ingest.js'], ['errors.js', 'errors.js']];
 const ENGINES = ['qwen3_moe_ssd.js', 'qwen35_moe_ssd.js', 'gemma4_moe_ssd.js'];
 // LocalMind's sibling paths → diskformer's src/ paths, in import and export-from statements.
-const REWRITES = { './opfs-reader.js': '../src/opfs-reader.js', './moe-expert-stream.js': '../src/expert-stream.js', './gguf.js': '../src/gguf.js', './ingest.js': '../src/ingest.js' };
+const REWRITES = { './opfs-reader.js': '../src/opfs-reader.js', './moe-expert-stream.js': '../src/expert-stream.js', './gguf.js': '../src/gguf.js', './ingest.js': '../src/ingest.js', './errors.js': '../src/errors.js' };
 // Module specifiers only: `from '…'`, `import '…'`, `import('…')`, either quote. A relative specifier that is
 // neither rewritten nor another engine would not resolve in engines/, so it stops the sync.
 const SPEC = /(\bfrom\s*|\bimport\s*\(?\s*)(['"])(\.\/[^'"]+)\2/g;

@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>per-layer states</title>
+<pre id="out">running</pre>
+<script type="module">
+// Per-layer states of Gemma 4 for one prompt's last position (each layer's attention output and layer output), for
+// test/state-check.py to compare with a numpy forward pass of llama.cpp's graph (LocalMind's scripts/gemma4-ref.py).
+//   node examples/run-demo.mjs test/browser/states.html --models <dir> --file <a Gemma 4 cut, e.g. g4-6l.gguf>
+// The prompt is `capital` from test/refs/ref-g4-26b-full-metal.json. The store stays under OPFS diskformer-test/.
+import { Gemma4MoeSsd } from '../../engines/gemma4_moe_ssd.js';
+import { storeKey } from '../../src/ingest.js';
+const url = new URLSearchParams(location.search).get('url');
+const log = (s) => { document.getElementById('out').textContent += `\n${s}`; window.progressText = s; };
+try {
+  const ids = (await (await fetch('../refs/ref-g4-26b-full-metal.json')).json()).results.find((r) => r.name === 'capital').ids;
+  const m = await Gemma4MoeSsd.load(null, { url, key: storeKey(url.split('/').pop()), root: 'diskformer-test', poolBytes: 2 ** 30, maxCtx: 512, capture: true,
+    onProgress: (e) => { if (e.status === 'weights' && e.total) log(`load ${e.kind || 'ingest'} ${e.loaded} of ${e.total}`); } });
+  m.reset();
+  await m.prefill(ids, 'logits');
+  const cap = await m.readCapture(), r = (a) => Array.from(a, (v) => +v.toPrecision(7));
+  await m.dispose();
+  window.result = { ok: true, ids, attnOut: cap.attnOut.map(r), layers: cap.layers.map(r) };
+  log(`captured ${cap.layers.length} layers`);
+} catch (e) { window.result = { ok: false, error: `${e.code || e.name}: ${e.message}` }; log(window.result.error); }
+</script>

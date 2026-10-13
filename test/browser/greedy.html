@@ -1,0 +1,51 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>greedy match vs llama.cpp</title>
+<pre id="out">running</pre>
+<script type="module">
+// Token-level gate: an engine's greedy continuation of each reference prompt, token by token, against llama.cpp's
+// (a JSON written by LocalMind's scripts/llama-ref.mjs: per prompt the token ids, llama.cpp's greedy tokens and its
+// top-5 log-probabilities at each step). Passes when every prompt matches.
+//   node examples/run-demo.mjs test/browser/greedy.html --models <dir> --file <gguf> --ref <ref.json> [--engine gemma|qwen35|qwen3]
+// The store goes under OPFS diskformer-test/<file> (--root picks another folder, e.g. chat's `diskformer`); it stays for the next run (remove it by name when done).
+// Ported from LocalMind's scripts/qwen3-moe-api.mjs compare(), which ran the 8/8 gates of 2026-10-05.
+import { Gemma4MoeSsd } from '../../engines/gemma4_moe_ssd.js';
+import { Qwen35MoeSsd } from '../../engines/qwen35_moe_ssd.js';
+import { Qwen3MoeSsd } from '../../engines/qwen3_moe_ssd.js';
+import { storeKey } from '../../src/ingest.js';
+const ENGINES = { gemma: Gemma4MoeSsd, qwen35: Qwen35MoeSsd, qwen3: Qwen3MoeSsd };
+const q = new URLSearchParams(location.search);
+const url = q.get('url'), refUrl = q.get('ref'), Engine = ENGINES[q.get('engine') || 'gemma'];
+const log = (s) => { document.getElementById('out').textContent += `\n${typeof s === 'string' ? s : JSON.stringify(s)}`; window.progressText = typeof s === 'string' ? s : JSON.stringify(s); };
+try {
+  const ref = await (await fetch(refUrl, { cache: 'no-store' })).json();
+  const t0 = performance.now();
+  const m = await Engine.load(null, { url, key: storeKey(url.split('/').pop()), root: q.get('root') || 'diskformer-test', poolBytes: Number(q.get('poolGB') || 4) * 2 ** 30, maxCtx: 512,
+    onProgress: (e) => { if (e.status === 'weights' && e.total) log(`load ${e.kind || 'ingest'} ${e.loaded} of ${e.total}`); } });
+  log(`loaded in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+  const rows = [];
+  for (const r of ref.results) {
+    const g = await m.greedy(r.ids, r.gen.length, { top: 5 });
+    // The reference runs with ignore_eos, so where its own top-1 is a banned token (EOS) its sampled token is not its
+    // top-1. The comparison ends there; agreeing on that top-1 is a match.
+    let n = r.gen.length, endedAtBan = false;
+    for (let i = 0; i < r.gen.length; i++) if (r.top[i][0][0] !== r.gen[i]) { n = i; endedAtBan = g.ids[i] === r.top[i][0][0]; break; }
+    let div = -1;
+    for (let i = 0; i < n; i++) if (g.ids[i] !== r.gen[i]) { div = i; break; }
+    if (div < 0 && n < r.gen.length && !endedAtBan) div = n;
+    // Max |Δ log-prob| on the reference's top-1 token before any divergence: the figure that decides greedy.
+    let maxd1 = 0;
+    for (let i = 0; i < (div < 0 ? n : div); i++) {
+      const ours = new Map(g.tops[i].map((x) => [x.id, x.logprob])), [id1, lp1] = r.top[i][0];
+      if (ours.has(id1)) maxd1 = Math.max(maxd1, Math.abs(ours.get(id1) - lp1));
+    }
+    const row = { name: r.name, n, match: div < 0, firstDivergence: div, maxAbsTop1LogprobDiff: +maxd1.toFixed(5) };
+    if (div >= 0) row.margins = { ref: +(r.top[div][0][1] - r.top[div][1][1]).toFixed(5), ours: +(g.tops[div][0].logprob - g.tops[div][1].logprob).toFixed(5) };
+    rows.push(row); log(row);
+  }
+  await m.dispose();
+  const matched = rows.filter((r) => r.match).length;
+  window.result = { ok: matched === rows.length, ref: ref.label, matched, of: rows.length, rows };
+} catch (e) { window.result = { ok: false, error: `${e.code || e.name}: ${e.message}` }; }
+log(window.result);
+</script>
