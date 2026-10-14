@@ -9,9 +9,18 @@
 //
 // The worker's messages are documented at the top of ggml/worker.mjs; this file only gives them promises.
 
+// The worker script, started from a blob when it lives on another origin (a CDN): browsers refuse a cross-origin
+// worker URL but let a module worker import a cross-origin module that allows CORS.
+function startWorker() {
+  const url = new URL('./worker.mjs', import.meta.url);
+  if (url.origin === location.origin) return new Worker(url, { type: 'module' });
+  const stub = URL.createObjectURL(new Blob([`import ${JSON.stringify(url.href)};`], { type: 'text/javascript' }));
+  return new Worker(stub, { type: 'module' });
+}
+
 export class Llama {
   constructor({ worker } = {}) {
-    this.worker = worker || new Worker(new URL('./worker.mjs', import.meta.url), { type: 'module' });
+    this.worker = worker || startWorker();
     this.busy = Promise.resolve();
     this.onLog = null;  // (line) => {}: llama.cpp's log
   }

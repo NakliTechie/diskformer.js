@@ -40,4 +40,6 @@ Chrome, with or without paging; GigaChat 3.1 10B-A1.8B (deepseek2): empty replie
 same architecture passes. **In progress**: Velvet-Eclipse 4x12B (Mixtral-style `llama` MoE).
 
 **Not covered**: dense models (no experts to page; a dense model runs only when it fits the GPU budget whole), maple
-(ternary expert formats WebGPU lacks), diffusion models (no chat path yet; MoE diffusion models such as LLaDA-MoE and RND1 are next), and architectures llama.cpp does not support yet.
+(ternary expert formats WebGPU lacks), diffusion models (paging is exact for diffusion MoE models such as LLaDA-MoE, but each denoising step reads nearly all
+experts, about 3.9 GB per step, so they are not supported, for speed; llama.cpp's WebGPU output for LLaDA-MoE also degrades
+where the CPU's does not, an open bug), and architectures llama.cpp does not support yet.

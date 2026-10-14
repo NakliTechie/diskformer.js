@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.2 (2026-10-14)
+- `diskformer/llama` works when imported from a CDN: a `Llama` on another origin starts its worker from a same-origin
+  stub that imports `worker.mjs`, because browsers refuse a cross-origin worker URL. Checked from a localhost page
+  importing only from jsDelivr: download, load and a chat reply from Granite 4.0 H Tiny.
+- README: a quick start that runs as pasted; the llama.cpp path leads.
+- docs/coverage.md: diffusion MoE models are not supported. Paging is exact for them, but each denoising step reads
+  nearly all experts (about 3.9 GB per step for LLaDA-MoE 7B-A1B); llama.cpp's WebGPU output for it degrades (open).
+
 ## 0.5.1 (2026-10-14)
 - The browser build (`diskformer/llama`) is rebuilt on the fork after merging upstream llama.cpp (fork `377491df7`, 167
   upstream commits including the MUL_MAT_ID rewrite #30451); checksums in `ggml/dist/BUILD.md`. Every gated model was
