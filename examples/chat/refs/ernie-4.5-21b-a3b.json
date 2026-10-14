@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp b9830 (c1a1c8ee9), Metal, -ngl 99: llama-server /v1/chat/completions, temperature 0, max_tokens 64, on ERNIE-4.5-21B-A3B-Thinking-Q4_K_M.gguf (sha256 9cd7c60d3c30f46e7f539043ec19c7ec8953153f65dd9a2a2748b8e3f589d015). Recorded 2026-10-13 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<|im_start|>system\n<global_setting>\nthink_mode=True\n</global_setting><|im_end|>\n\n<|im_start|>user\nExplain the difference between TCP and UDP to a new programmer.<|im_end|>\n\n<|im_start|>assistant\n<think>\n",
+   "content": "We are explaining the difference between TCP and UDP to a new programmer.\n Let's break it down into simple terms.\n\n TCP (Transmission Control Protocol) is like making a phone call to a waiter at a restaurant.\n - You call the waiter and say: \"I'd like an",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<|im_start|>system\n<global_setting>\nthink_mode=True\n</global_setting><|im_end|>\n\n<|im_start|>user\nExtract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<|im_end|>\n\n<|im_start|>assistant\n<think>\n",
+   "content": "We are given the sentence: \"Priya, 34 , moved from Pune to Lisbon last year.\"\n We need to extract:\n   - Name: Pri",
+   "finish": "length",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<|im_start|>system\n<global_setting>\nthink_mode=True\n</global_setting><|im_end|>\n\n<|im_start|>user\nTranslate into Hindi: \"The library opens at nine and closes at six.\"<|im_end|>\n\n<|im_start|>assistant\n<think>\n",
+   "content": "Let me start by understanding the user's request. They want to translate the English sentence \"The library opens at nine and closes at six.\" into Hindi. \n\nFirst, I need to recall the correct Hindi terms for the times mentioned. \"Nine\" in Hindi is \"नौ\" (noo",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<|im_start|>system\n<global_setting>\nthink_mode=True\n</global_setting><|im_end|>\n\n<|im_start|>user\nA train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<|im_end|>\n\n<|im_start|>assistant\n<think>\n",
+   "content": "Let's see. The train leaves at 14:10 and arrives at 17:45. I need to find out how long the journey took. Hmm, so first, maybe I should convert these times into minutes since that might make it easier to subtract. Let me start by figuring",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<|im_start|>system\n<global_setting>\nthink_mode=True\n</global_setting><|im_end|>\n\n<|im_start|>user\nWrite a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<|im_end|>\n\n<|im_start|>assistant\n<think>\n",
+   "content": "We are given two tables: customers(id, name) and orders(id, customer_id, amount)\n We need to compute the total order value for each customer (by summing the amount from their orders)\n Then, we want to return the top 5 customers by this total order value.\n",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<|im_start|>system\n<global_setting>\nthink_mode=True\n</global_setting><|im_end|>\n\n<|im_start|>user\nList five major rivers of Africa, one per line, with the country where each reaches the sea.<|im_end|>\n\n<|im_start|>assistant\n<think>\n",
+   "content": "The user wants me to list five major rivers in Africa, each on a separate line, and specify the country where each reaches the sea. Let",
+   "finish": "length",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<|im_start|>system\n<global_setting>\nthink_mode=True\n</global_setting><|im_end|>\n\n<|im_start|>user\nWhat do these emoji usually mean in a text message: 🙏 🔥 💀 ?<|im_end|>\n\n<|im_start|>assistant\n<think>\n",
+   "content": "The user is asking about the meanings of three specific emojis in text messages: 🙏, 🔥, and 💀. Let me start by recalling what each of these emojis typically represents. \nFirst, the 🙏 emoji",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<|im_start|>system\n<global_setting>\nthink_mode=True\n</global_setting><|im_end|>\n\n<|im_start|>user\nWrite a haiku about autumn leaves in a city.<|im_end|>\n\n<|im_start|>assistant\n<think>\n",
+   "content": "The user wants a haiku about autumn leaves in a city. Let me start by recalling the structure",
+   "finish": "length",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<|im_start|>system\n<system_setting>\nAnswer like a cheerful pirate, in two sentences.\n</system_setting>\n\n<global_setting>\nthink_mode=True\n</global_setting><|im_end|>\n\n<|im_start|>user\nWhat is the boiling point of water at sea level?<|im_end|>\n\n<|im_start|>assistant\n<think>\n",
+   "content": "The user is asking about the boiling point of water at sea level. Let me think. I know that at standard atmospheric pressure, which is at sea level, water boils at 100 degrees",
+   "finish": "length",
+   "tokens": 41
+  }
+ ]
+}

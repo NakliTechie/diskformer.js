@@ -17,7 +17,7 @@ Plain ES modules, no dependencies, no build step. Chromium with WebGPU. Weights 
 | How | Command |
 |---|---|
 | npm | `npm install diskformer` |
-| CDN | `import { Gemma4MoeSsd } from 'https://cdn.jsdelivr.net/npm/diskformer@0.4/engines/gemma4_moe_ssd.js'` |
+| CDN | `import { Llama } from 'https://cdn.jsdelivr.net/npm/diskformer@0.5/ggml/llama.js'` |
 | Copy | `src/`, `engines/` and `index.js`; nothing else is needed |
 
 ## Try it: an 80B model (48 GB file) in under 5 GB of GPU memory
@@ -34,8 +34,8 @@ once. Measured in Chrome on a MacBook Pro M4 Pro, 24 GB, 2026-10-13 (the recordi
 | OLMoE 1B-7B, Q4_K_M | 4.21 GB | 3.92 GB | 22.4 tok/s | 9/9 identical |
 | LFM2 8B-A1B, Q4_K_M | 5.04 GB | 3.89 GB | 17.1 tok/s | 9/9 identical |
 
-Qwen3 30B-A3B runs too. References: `examples/chat/refs/`. The two hand-written engines below run at
-[/classic/](https://diskformer.naklitechie.com/classic/), or locally with `python3 -m http.server` and `examples/chat/`.
+Gated the same way (paged replies identical across slot counts, then Chrome against llama.cpp): Gemma 4, Qwen3, Qwen3.6,
+Qwen3-VL, OLMoE, LFM2, LFM2.5, Granite 4.0 H, gpt-oss, ERNIE 4.5, GLM-4.7-Flash, Mellum2, Ling 2.0, North. Refs: `examples/chat/refs/`.
 
 The hand-written engines, measured on a MacBook M4 Pro with 24 GB, Chrome 154, on 2026-10-05:
 
@@ -50,13 +50,14 @@ The hand-written engines, measured on a MacBook M4 Pro with 24 GB, Chrome 154, o
 64 tokens; Qwen3.6 does not fit Metal here). Each row is `node examples/run-demo.mjs chat --budget <GB>`, decode the
 median. Only Apple silicon is tested; discrete GPUs and 8–16 GB machines are not.
 
-In your own page (the first load downloads the GGUF into OPFS in the engine's layout; later loads take seconds):
-
+In your own page (the GGUF downloads into OPFS once; later loads take seconds). The hand-written engines run at
+[/classic/](https://diskformer.naklitechie.com/classic/) and load the same way: `Gemma4MoeSsd.load(null, { gpuBudgetBytes })`.
 ```js
-import { Gemma4MoeSsd } from 'diskformer/engines/gemma4_moe_ssd.js';
-
-const engine = await Gemma4MoeSsd.load(null, { gpuBudgetBytes: 3e9, onProgress: console.log });
-for await (const { text } of engine.generate([{ role: 'user', content: 'Hello' }], { maxNewTokens: 128 })) show(text);
+import { Llama } from 'diskformer/llama';                   // llama.cpp path, any MoE GGUF on a gated architecture
+const llama = new Llama();
+await llama.download({ url, name: 'model.gguf', size });    // resumable; a GGUF on disk works with a local URL
+await llama.load({ name: 'model.gguf', budget: 4e9 });      // GPU memory in bytes; the experts page in from OPFS
+const { text } = await llama.chat([{ role: 'user', content: 'Hello' }], { onPiece: show });
 ```
 
 ## Why

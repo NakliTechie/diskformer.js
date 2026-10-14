@@ -1,10 +1,10 @@
-# diskformer × llama.cpp driver. LLAMA_DIR: a checkout of NakliTechie/llama.cpp, branch webgpu-disk-tier.
+# diskformer × llama.cpp driver. LLAMA_DIR: a checkout of NakliTechie/llama.cpp, branch webgpu-diskformer.
 #   native:  CMAKE_PREFIX_PATH=<dawn> cmake -B build -DLLAMA_DIR=... && cmake --build build --target df-chat
 #   browser: emcmake cmake -B build-wasm -DLLAMA_DIR=... -DEMDAWNWEBGPU_DIR=<pkg> && cmake --build build-wasm --target df-chat
 cmake_minimum_required(VERSION 3.20)
 project(diskformer-ggml CXX C)
 
-set(LLAMA_DIR "" CACHE PATH "llama.cpp checkout (branch webgpu-disk-tier)")
+set(LLAMA_DIR "" CACHE PATH "llama.cpp checkout (branch webgpu-diskformer)")
 if(NOT LLAMA_DIR)
     message(FATAL_ERROR "set -DLLAMA_DIR")
 endif()

@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp fork build 11474 (e2ac18e28), WebGPU, experts paged (8 slots), -ngl 99: llama-server /completion on the /apply-template prompt, temperature 0, max_tokens 64, on GLM-4.7-Flash-Q3_K_M.gguf (sha256 d11329183bbb320f11d025b66c4d546e4b58010381a580708ef2fe7415a92307). Recorded 2026-10-13 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "[gMASK]<sop><|user|>Explain the difference between TCP and UDP to a new programmer.<|assistant|><think>",
+   "content": "1.  **Analyze the Request:**\n    *   **Topic:** TCP vs. UDP.\n    *   **Target Audience:** A new programmer (beginner level).\n    *   **Goal:** Explain the differences clearly, simply, and effectively.\n\n2.  **Identify Key Concepts:**\n    *",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "[gMASK]<sop><|user|>Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<|assistant|><think>",
+   "content": "1.  **Analyze the Request:**\n    *   Input sentence: \"Priya, 34, moved from Pune to Lisbon last year.\"\n    *   Task",
+   "finish": "stop",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "[gMASK]<sop><|user|>Translate into Hindi: \"The library opens at nine and closes at six.\"<|assistant|><think>",
+   "content": "1.  **Analyze the Source Sentence:** \"The library opens at nine and closes at six.\"\n    *   \"The library\" -> सिन्डेक्स (Sindex) or किताबाघर (Kitaabaghār). \"Kitaab",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "[gMASK]<sop><|user|>A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<|assistant|><think>",
+   "content": "1.  **Analyze the Request:**\n    *   Departure time: 14:10\n    *   Arrival time: 17:45\n    *   Goal: Calculate the duration of the journey.\n    *   Constraint: Show the steps briefly.\n\n2.  **Determine the Method:",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "[gMASK]<sop><|user|>Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<|assistant|><think>",
+   "content": "1.  **Understand the Goal:** The user wants a SQL query to find the top 5 customers based on their total order value.\n\n2.  **Identify the Tables:**\n    *   `customers` table: columns `id`, `name`.\n    *   `orders` table: columns `",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "[gMASK]<sop><|user|>List five major rivers of Africa, one per line, with the country where each reaches the sea.<|assistant|><think>",
+   "content": "1.  **Analyze the Request:**\n    *   **Topic:** Major rivers of Africa.\n    *   **Quantity:** Five.\n",
+   "finish": "stop",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "[gMASK]<sop><|user|>What do these emoji usually mean in a text message: 🙏 🔥 💀 ?<|assistant|><think>",
+   "content": "1.  **Analyze the Request:** The user is asking for the meanings of three specific emojis: 🙏 (folded hands), 🔥 (fire), and 💀 (skull). They want to know how these are typically used in text messages.\n\n2.  **Analyze Emoji 1:",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "[gMASK]<sop><|user|>Write a haiku about autumn leaves in a city.<|assistant|><think>",
+   "content": "1.  **Analyze the Request:**\n    *   **Topic:** Autumn leaves in a city",
+   "finish": "stop",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "[gMASK]<sop><|system|>Answer like a cheerful pirate, in two sentences.<|user|>What is the boiling point of water at sea level?<|assistant|><think>",
+   "content": "1.  **Analyze the Request:**\n    *   **Persona:** Cheerful pirate.\n    *   **Constraint:** Exactly two sentences.\n    *   **Topic:** Boiling point of water",
+   "finish": "stop",
+   "tokens": 41
+  }
+ ]
+}

@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0 (2026-10-14)
+- Added: `diskformer/llama`, the llama.cpp path in the package. `ggml/llama.js` (`Llama`: download, list, remove, load,
+  chat, complete, abort) drives `ggml/worker.mjs`, which runs `ggml/dist/df-chat.wasm`: llama.cpp with WebGPU, the MoE
+  experts paged in from OPFS. Built from the fork NakliTechie/llama.cpp, branch `webgpu-diskformer` (renamed from
+  `webgpu-disk-tier`); commit and sha256 in `ggml/dist/BUILD.md`.
+- Width: gated on this path (paged replies identical across slot counts natively, then Chrome against llama.cpp):
+  gemma4, qwen3moe, qwen3next, qwen35moe, qwen3vlmoe, olmoe, lfm2moe (LFM2, LFM2.5), granitehybrid, gpt-oss (MXFP4),
+  ernie4_5-moe, deepseek2 (GLM-4.7-Flash), mellum, bailingmoe2, cohere2moe. References in `examples/chat/refs/`.
+- Fixed: chat templates that use `{% break %}` killed the worker (all C++ now built with wasm exceptions); a C++
+  exception is reported with its message; a template that fails no longer stops the model loading.
+- Fixed: a download resumed after a reload before its first chunk finished kept half-written chunks (a chunk counts as
+  finished only after its bytes are flushed).
+- Demo: reasoning (gpt-oss channels, `<think>` blocks) shows as a collapsible Thought; a stored file's name renders as
+  text; the classic page takes `?url=` only on localhost.
+
 ## 0.4.1 (2026-10-13)
 - Docs only: the README now leads with the llama.cpp path (Qwen3-Next 80B-A3B, a 48 GB file, in under 5 GB of GPU
   memory; OLMoE and LFM2 in real time) and the recording. No code changes.

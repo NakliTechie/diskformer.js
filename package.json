@@ -1,7 +1,7 @@
 {
   "name": "diskformer",
-  "version": "0.4.1",
-  "description": "Run a model larger than your GPU memory in a browser tab: weights stay in OPFS, WebGPU holds only what each step needs. A disk tier plus two reference MoE engines.",
+  "version": "0.5.0",
+  "description": "Run a model larger than your GPU memory in a browser tab: weights stay in OPFS, WebGPU holds only what each step needs. llama.cpp with paged MoE experts (diskformer/llama), a disk tier, and hand-written MoE engines.",
   "type": "module",
   "license": "MIT",
   "author": "Chirag Patnaik",
@@ -14,19 +14,25 @@
     "url": "https://github.com/NakliTechie/diskformer.js/issues"
   },
   "keywords": [
-    "webgpu",
-    "opfs",
-    "llm",
-    "inference",
-    "offload",
-    "moe",
     "browser",
-    "transformers"
+    "gguf",
+    "inference",
+    "llama.cpp",
+    "llm",
+    "moe",
+    "offload",
+    "opfs",
+    "transformers",
+    "wasm",
+    "webgpu"
   ],
   "files": [
     "index.js",
     "src/",
     "engines/",
+    "ggml/llama.js",
+    "ggml/worker.mjs",
+    "ggml/dist/",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
@@ -34,7 +40,9 @@
   "main": "index.js",
   "exports": {
     ".": "./index.js",
-    "./engines/*": "./engines/*"
+    "./engines/*": "./engines/*",
+    "./llama": "./ggml/llama.js",
+    "./llama/worker": "./ggml/worker.mjs"
   },
   "scripts": {
     "test": "node test/run.mjs",

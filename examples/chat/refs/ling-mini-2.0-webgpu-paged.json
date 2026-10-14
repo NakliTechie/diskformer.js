@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp fork build 11474 (e2ac18e28), WebGPU, experts paged (8 slots), -ngl 99: llama-server /completion on the /apply-template prompt, temperature 0, max_tokens 64, on Ling-mini-2.0-Q4_K_M.gguf (sha256 ebdd2df3bf18c5acd8537b8af5ad42253078ddd6ae49eed040376e9e9e0c1016). Recorded 2026-10-13 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>detailed thinking off<|role_end|><role>HUMAN</role>Explain the difference between TCP and UDP to a new programmer.<|role_end|><role>ASSISTANT</role>",
+   "content": "Sure! Imagine you're sending a letter through the mail. You have two options: **Postal Mail (TCP)** or **Express Courier (UDP)**. Let’s break down the differences between **TCP (Transmission Control Protocol)** and **UDP (User Datagram Protocol)** in a way that’s easy for a new",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>detailed thinking off<|role_end|><role>HUMAN</role>Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<|role_end|><role>ASSISTANT</role>",
+   "content": "Here's the extracted information in JSON format:\n\n```json\n{\n  \"name\": \"Priya\",\n  \"city\": \"Lisbon\",\n",
+   "finish": "stop",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>detailed thinking off<|role_end|><role>HUMAN</role>Translate into Hindi: \"The library opens at nine and closes at six.\"<|role_end|><role>ASSISTANT</role>",
+   "content": "\"पुस्तकालय 9 बजे से चार बजे तक खुलता है।\"",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>detailed thinking off<|role_end|><role>HUMAN</role>A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<|role_end|><role>ASSISTANT</role>",
+   "content": "To find the duration of the journey, we calculate the time difference between the arrival and departure times.\n\n**Step 1: Convert both times to a 24-hour format (already in 24-hour format).**  \n- Departure: 14:10  \n- Arrival:",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>detailed thinking off<|role_end|><role>HUMAN</role>Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<|role_end|><role>ASSISTANT</role>",
+   "content": "To retrieve the five customers with the highest total order value, you can use the following SQL query. This query joins the `customers` and `orders` tables, calculates the total order value for each customer, and then orders the results in descending order to get the top five customers.\n\n```sql\nSELECT c",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>detailed thinking off<|role_end|><role>HUMAN</role>List five major rivers of Africa, one per line, with the country where each reaches the sea.<|role_end|><role>ASSISTANT</role>",
+   "content": "Nile - Egypt\n\nNiger - Nigeria\n\nCongo - Democratic Republic of the Congo\n\nNiger - Niger\n\nZ",
+   "finish": "stop",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>detailed thinking off<|role_end|><role>HUMAN</role>What do these emoji usually mean in a text message: 🙏 🔥 💀 ?<|role_end|><role>ASSISTANT</role>",
+   "content": "In a text message, the emojis you provided—🙏, 🔥, and 💀—can have different meanings depending on the context and the relationship between the people communicating. Here's a general interpretation of each:\n\n1. **🙏 (Folded Hands)**: This emoji is",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>detailed thinking off<|role_end|><role>HUMAN</role>Write a haiku about autumn leaves in a city.<|role_end|><role>ASSISTANT</role>",
+   "content": "Crimson whispers fall,  \nSteel-gray towers stand silent—  \nFootsteps crunch, then",
+   "finish": "stop",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>Answer like a cheerful pirate, in two sentences.\ndetailed thinking off<|role_end|><role>HUMAN</role>What is the boiling point of water at sea level?<|role_end|><role>ASSISTANT</role>",
+   "content": "Ahoy, matey! The boiling point of water at sea level is a toasty 100 degrees Celsius, or 212 degrees Fahrenheit, under the mighty sun! 🌞",
+   "finish": "stop",
+   "tokens": 41
+  }
+ ]
+}

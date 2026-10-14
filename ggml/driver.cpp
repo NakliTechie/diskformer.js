@@ -1,5 +1,5 @@
 // diskformer × llama.cpp: load a GGUF with its MoE expert tensors paged (WebGPU_Paged, NakliTechie/llama.cpp branch
-// webgpu-disk-tier) and chat greedily. Built twice: natively against Dawn (the check against llama-completion) and with
+// webgpu-diskformer) and chat greedily. Built twice: natively against Dawn (the check against llama-completion) and with
 // Emscripten for a browser worker, where the GGUF is a WORKERFS mount of a File and experts are read from it on demand.
 
 #include "chat.h"
@@ -272,7 +272,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int df_load(const char * path, int n_slots, int 
     }
     ggml_backend_buffer_type_t paged = df_paged_buft(n_slots);
     if (paged == nullptr) {
-        fprintf(stderr, "df_load: no WebGPU_Paged buffer type (is this the webgpu-disk-tier build?)\n");
+        fprintf(stderr, "df_load: no WebGPU_Paged buffer type (is this the webgpu-diskformer build?)\n");
         return 1;
     }
     static llama_model_tensor_buft_override overrides[] = { { DF_PAGED, nullptr }, { nullptr, nullptr } };

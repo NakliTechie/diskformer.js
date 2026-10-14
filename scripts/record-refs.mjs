@@ -1,6 +1,6 @@
 // Records llama.cpp reference replies for the chat gate: runs llama-server on a GGUF (Metal, every layer on the GPU),
 // sends the 9 gate conversations greedily, and writes prompt + reply per conversation, as in examples/chat/refs/.
-// --server picks another llama-server build, e.g. the webgpu-disk-tier fork's; --paged <slots> then pages the experts
+// --server picks another llama-server build, e.g. the webgpu-diskformer fork's; --paged <slots> then pages the experts
 // (-ot exps=WebGPU_Paged, read from the GGUF), so paged and unpaged runs of one backend can be compared
 // (scripts/compare-refs.mjs).
 //
