@@ -32,12 +32,17 @@ How each row is checked (references and replies in [`examples/chat/refs/`](../ex
 | bailingmoe3 | Ling 3.0 tiny, Q4_K_M | 4.9 GB | 9/9 (unpaged vs 8) | 8/9 vs CPU | Edge0 8B-A1B |
 | olmoe | OLMoE 1B-7B 0125 Instruct, Q4_K_M | 4.2 GB | 9/9 (unpaged vs 8) | 8/9 | |
 
+**Runs, too slow to be practical**: Velvet-Eclipse 4x12B v0.2 (Mixtral-style `llama` MoE, Q3_K_M, 18.7 GB). With
+experts paged at 2 slots, llama.cpp natively gives a correct reply at 0.74 tok/s, reading 1.4 GB from disk per token,
+because it uses 2 of its 4 experts on every token. Not checked reply by reply: in Chrome no reply finished within 16
+minutes. Paging helps when a token uses a small share of the experts (Qwen3.6: 8 of 256), not here.
+
 **Runs, below the bar**: Hunyuan MT2 30B-A3B (hy_v3; paging exact 9/9, Chrome 3/9 against a CPU reference: coherent
 replies that part at word choices, as GPUs and CPUs round differently) and Trinity Nano (afmoe; Chrome 3/9).
 
 **Does not work yet**: Laguna XS 2.1 (laguna): llama.cpp's WebGPU backend returns unknown tokens for it, natively and in
 Chrome, with or without paging; GigaChat 3.1 10B-A1.8B (deepseek2): empty replies in Chrome, though GLM-4.7-Flash on the
-same architecture passes. **In progress**: Velvet-Eclipse 4x12B (Mixtral-style `llama` MoE).
+same architecture passes.
 
 **Not covered**: dense models (no experts to page; a dense model runs only when it fits the GPU budget whole), maple
 (ternary expert formats WebGPU lacks), diffusion models (paging is exact for diffusion MoE models such as LLaDA-MoE, but each denoising step reads nearly all
