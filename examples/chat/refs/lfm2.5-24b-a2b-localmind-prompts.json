@@ -1,0 +1,69 @@
+{
+ "about": "LocalMind ref-lfm2moe-metal.json (llama.cpp 3d82ef62d Metal, flash attention off, 32 tokens), converted to the gate format",
+ "conversations": [
+  {
+   "name": "capital",
+   "messages": [],
+   "prompt": "The capital of France is",
+   "content": " Paris. The capital of Germany is Berlin. The capital of Italy is Rome. The capital of Spain is Madrid. The capital of the United Kingdom is London.",
+   "finish": "length",
+   "tokens": 32
+  },
+  {
+   "name": "arith-chat",
+   "messages": [],
+   "prompt": "<|im_start|>user\nWhat is 17 multiplied by 23? Answer with the number only.<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "The user asks: \"What is 17 multiplied by 23? Answer with the number only.\"\n\nWe need to compute 17 * 23 = ",
+   "finish": "length",
+   "tokens": 32
+  },
+  {
+   "name": "code",
+   "messages": [],
+   "prompt": "def fibonacci(n):\n    \"\"\"Return the n-th Fibonacci number.\"\"\"\n",
+   "content": "    if n <= 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        a, b =",
+   "finish": "length",
+   "tokens": 32
+  },
+  {
+   "name": "haiku-chat",
+   "messages": [],
+   "prompt": "<|im_start|>user\nWrite a haiku about the sea.<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "\nWe need to write a haiku about the sea. Haiku: 5-7-5 syllables. Should be evocative. Let me",
+   "finish": "length",
+   "tokens": 32
+  },
+  {
+   "name": "science",
+   "messages": [],
+   "prompt": "Photosynthesis is the process by which",
+   "content": " green plants and some other organisms use sunlight to synthesize foods from carbon dioxide and water. In plants, this process takes place in the chloroplasts, specifically",
+   "finish": "length",
+   "tokens": 32
+  },
+  {
+   "name": "french",
+   "messages": [],
+   "prompt": "Le chat est assis sur",
+   "content": " le bord du bord de la table. The cat is sitting on the edge of the JJJ's table. JJJ's table is a rectangular table with",
+   "finish": "length",
+   "tokens": 32
+  },
+  {
+   "name": "system-chat",
+   "messages": [],
+   "prompt": "<|im_start|>system\nYou are a terse assistant.<|im_end|>\n<|im_start|>user\nName three primary colors.<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "\nThe user is asking for the three primary colors. This is a straightforward factual question. The primary colors of light (additive color model) are red",
+   "finish": "length",
+   "tokens": 32
+  },
+  {
+   "name": "numbers",
+   "messages": [],
+   "prompt": "In 1969, 3 astronauts flew 384400 km to the Moon; 12 people walked on it by 1972.",
+   "content": " In 1969, 3 astronauts flew 384400 km to the Moon; 12 people walked on it by 1972. In 1969",
+   "finish": "length",
+   "tokens": 32
+  }
+ ]
+}

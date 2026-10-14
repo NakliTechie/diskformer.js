@@ -6,7 +6,9 @@
 //
 //   node scripts/record-refs.mjs <model.gguf> <out.json> [--port 8799] [--ctx 4096] [--server <llama-server>] [--paged <slots>] [--ngl 0 (CPU)] [--no-stream] [--raw]
 // --raw: the reply as generated, reasoning included (--reasoning-format none), as the browser driver returns it; for
-// models that reason first (gpt-oss), whose 64-token reply is otherwise empty.
+// models that reason first (gpt-oss), whose 64-token reply is otherwise empty. The reply is generated from the stored
+// prompt itself (/completion), so the gate replays exactly what was generated from: through the chat endpoint, a
+// template that prefills <think> (LFM2.5) rendered one prompt for /apply-template and generated from another.
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createReadStream, readFileSync, writeFileSync } from 'node:fs';
@@ -37,6 +39,42 @@ const post = async (path, body) => {
 // reply than fetch waits for headers (5 minutes).
 // --no-stream: one plain request per reply through curl (on Qwen3-Next, llama-server b9830's CPU path closed a stream
 // mid-prompt, and Node's fetch dropped plain requests).
+// Plain greedy: a GGUF can carry sampling defaults (LFM2.5: general.sampling.penalty_repeat 1.05) that llama-server
+// applies even at temperature 0, so every penalty is set off. A gate replays with plain greedy.
+const GREEDY = { temperature: 0, repeat_penalty: 1, presence_penalty: 0, frequency_penalty: 0, dry_multiplier: 0 };
+
+// The reply to a rendered prompt, greedy, streamed (raw mode).
+async function complete(prompt, maxTokens) {
+  const body = { prompt, n_predict: maxTokens, ...GREEDY, cache_prompt: false };
+  if (rest.includes('--no-stream')) {
+    let out;
+    for (let t = 0; t < 3; t++) {
+      out = spawnSync('curl', ['-s', '--max-time', '3600', '-H', 'content-type: application/json', '-d', JSON.stringify(body), `${base}/completion`], { encoding: 'utf8', maxBuffer: 1 << 24 });
+      if (out.status === 0) break;
+      console.error(`curl exited ${out.status}; retrying`);
+    }
+    if (out.status !== 0) throw new Error(`curl exited ${out.status} three times: ${out.stderr}`);
+    const r = JSON.parse(out.stdout);
+    return { content: r.content, finish: r.stop_type || (r.stopped_limit ? 'length' : 'stop') };
+  }
+  const r = await fetch(base + '/completion', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...body, stream: true }) });
+  if (!r.ok) throw new Error(`/completion: HTTP ${r.status} ${await r.text()}`);
+  let content = '', finish = null, buf = '';
+  const dec = new TextDecoder();
+  for await (const chunk of r.body) {
+    buf += dec.decode(chunk, { stream: true });
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+      if (!line.startsWith('data:')) continue;
+      const d = JSON.parse(line.slice(5));
+      content += d.content || '';
+      if (d.stop) finish = d.stopped_limit ? 'length' : 'stop';
+    }
+  }
+  return { content, finish };
+}
+
 async function chat(messages, maxTokens) {
   if (rest.includes('--no-stream')) {
     // curl, not fetch: Node's fetch dropped the connection while a slow server worked on a reply.
@@ -44,7 +82,7 @@ async function chat(messages, maxTokens) {
     // the same reply.
     let out;
     for (let t = 0; t < 3; t++) {
-      out = spawnSync('curl', ['-s', '--max-time', '3600', '-H', 'content-type: application/json', '-d', JSON.stringify({ messages, temperature: 0, max_tokens: maxTokens }), `${base}/v1/chat/completions`], { encoding: 'utf8', maxBuffer: 1 << 24 });
+      out = spawnSync('curl', ['-s', '--max-time', '3600', '-H', 'content-type: application/json', '-d', JSON.stringify({ messages, ...GREEDY, max_tokens: maxTokens }), `${base}/v1/chat/completions`], { encoding: 'utf8', maxBuffer: 1 << 24 });
       if (out.status === 0) break;
       console.error(`curl exited ${out.status}; retrying`);
     }
@@ -53,7 +91,7 @@ async function chat(messages, maxTokens) {
     return { content: r.choices[0].message.content, finish: r.choices[0].finish_reason };
   }
   const r = await fetch(base + '/v1/chat/completions', { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ messages, temperature: 0, max_tokens: maxTokens, stream: true }) });
+    body: JSON.stringify({ messages, ...GREEDY, max_tokens: maxTokens, stream: true }) });
   if (!r.ok) throw new Error(`/v1/chat/completions: HTTP ${r.status} ${await r.text()}`);
   let content = '', finish = null, buf = '';
   const dec = new TextDecoder();
@@ -96,12 +134,12 @@ try {
   const result = [];
   for (const c of conversations) {
     const { prompt } = await post('/apply-template', { messages: c.messages });
-    const { content, finish } = await chat(c.messages, c.tokens);
+    const { content, finish } = rest.includes('--raw') ? await complete(prompt, c.tokens) : await chat(c.messages, c.tokens);
     result.push({ name: c.name, messages: c.messages, prompt, content, finish, tokens: c.tokens });
     console.log(`${c.name}: ${JSON.stringify(content.slice(0, 60))}…`);
   }
   const doc = {
-    about: `llama.cpp ${version || '?'}, ${backend}, -ngl ${ngl}: llama-server /v1/chat/completions, temperature 0, max_tokens 64, on ${basename(gguf)} (sha256 ${await sha256()}). Recorded ${new Date().toISOString().slice(0, 10)} by scripts/record-refs.mjs.`,
+    about: `llama.cpp ${version || '?'}, ${backend}, -ngl ${ngl}: llama-server ${rest.includes('--raw') ? '/completion on the /apply-template prompt' : '/v1/chat/completions'}, temperature 0, max_tokens 64, on ${basename(gguf)} (sha256 ${await sha256()}). Recorded ${new Date().toISOString().slice(0, 10)} by scripts/record-refs.mjs.`,
     conversations: result,
   };
   writeFileSync(out, JSON.stringify(doc, null, 1) + '\n');

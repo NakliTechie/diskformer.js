@@ -291,6 +291,11 @@ extern "C" EMSCRIPTEN_KEEPALIVE int df_load(const char * path, int n_slots, int 
     cp.n_ctx                = n_ctx;
     cp.n_batch              = 512;
     cp.no_perf              = false;
+    // DF_FLASH_ATTN=0 / 1 forces flash attention off / on (default: llama.cpp decides), to compare with a reference
+    // recorded either way
+    if (const char * fa = getenv("DF_FLASH_ATTN")) {
+        cp.flash_attn_type = atoi(fa) ? LLAMA_FLASH_ATTN_TYPE_ENABLED : LLAMA_FLASH_ATTN_TYPE_DISABLED;
+    }
     g_ctx                   = llama_init_from_model(g_model, cp);
     if (g_ctx == nullptr) {
         return 3;

@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp fork build 11474 (e2ac18e28), WebGPU, experts paged (8 slots), -ngl 99: llama-server /v1/chat/completions, temperature 0, max_tokens 64, on LFM2.5-24B-A2B-QAD-Q4_0.gguf (sha256 89617cc4d3a52e973ee8dea72c7df04285f582107385796ba903f81e540e4afa). Recorded 2026-10-13 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<|im_start|>user\nExplain the difference between TCP and UDP to a new programmer.<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "<think>\nWe need to explain TCP vs UDP to a new programmer. First person, specific. No \"as an AI\". Lead with substance. Keep it clear. Let me structure: start with a quick analogy or direct statement. Then contrast key points: connection vs connectionless, reliability, ordering, speed, use cases",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<|im_start|>user\nExtract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "<think>We need to extract name, city, and age from the sentence: \"Priya, 34, moved from Pune to Lisbon last year.\"\n\nWe need",
+   "finish": "length",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<|im_start|>user\nTranslate into Hindi: \"The library opens at nine and closes at six.\"<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "<think>1.  **Analyze the source sentence:** \"The library opens at nine and closes at six.\"\n    *   Subject: The library\n    *   Verb 1: opens (present simple, habitual action or scheduled event)\n    *   Time 1: at nine\n    *   Conjunction: and",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<|im_start|>user\nA train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "<think>\nWe need to answer: A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show steps briefly.\n\nWe compute difference between times: from 14:10 to 17:45.\n\nFirst, convert both to minutes after midnight or just compute hour difference.\n\nFrom",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<|im_start|>user\nWrite a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "<think>We need to produce a SQL query that returns the top 5 customers with highest total order value. The schema: customers(id, name) and orders(id, customer_id, amount). So we need to join customers with orders on customer_id = id (or maybe orders.customer_id references customers.id). Then group by",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<|im_start|>user\nList five major rivers of Africa, one per line, with the country where each reaches the sea.<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "<think>We need to list five major rivers of Africa, each on its own line, and include the country where each reaches the sea.\n\nWe must be",
+   "finish": "length",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<|im_start|>user\nWhat do these emoji usually mean in a text message: 🙏 🔥 💀 ?<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "<think>The user asks: \"What do these emoji usually mean in a text message: 🙏 🔥 💀 ?\" They want an explanation of the meaning of each emoji individually, and perhaps collectively. The question is about typical usage in text messages. We need to answer with a description of each emoji's",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<|im_start|>user\nWrite a haiku about autumn leaves in a city.<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "<think>\nWe need to write a haiku about autumn leaves in a city. Haiku: 5-",
+   "finish": "length",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<|im_start|>system\nAnswer like a cheerful pirate, in two sentences.<|im_end|>\n<|im_start|>user\nWhat is the boiling point of water at sea level?<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "<think>\nThe user asks about the boiling point of water at sea level, which is a straightforward factual question. I need to answer it accurately while maintaining the cheerful pirate persona. The key facts are",
+   "finish": "length",
+   "tokens": 41
+  }
+ ]
+}

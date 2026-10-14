@@ -1,12 +1,13 @@
 // The Chrome chat gate on the llama.cpp path, unattended: headless Chrome opens ggml/gate.html, which copies a local
 // GGUF into the profile's OPFS over HTTP Range (served here from --models), replays llama.cpp's replies
-// (examples/chat/refs/*.json) with paged experts, and reports how many match. The OPFS copy is removed afterwards
-// unless --keep, so a run leaves no model behind.
+// (examples/chat/refs/*.json) with paged experts, and reports how many match. Each run uses a new Chrome profile that
+// is deleted when Chrome exits (Chrome holds the OPFS file until then, so removing it from a page fails), unless
+// --profile names one to keep.
 //   node scripts/chrome-gate.mjs <file.gguf> <refs.json> --models <dir> [--slots 8] [--profile dir] [--keep] [--out x.json]
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { createReadStream, realpathSync } from 'node:fs';
-import { readFile, stat, realpath, writeFile } from 'node:fs/promises';
+import { readFile, stat, realpath, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, extname, normalize, sep } from 'node:path';
 
@@ -36,7 +37,8 @@ const server = createServer(async (req, res) => {
 }).listen(Number(arg('port', 8192)), '127.0.0.1');
 await new Promise((r) => server.once('listening', r));
 const port = server.address().port, cdp = 9500 + (port % 400);
-const profile = arg('profile', join(homedir(), '.cache/diskformer-gate-profile'));
+const own = !arg('profile');
+const profile = arg('profile') || await mkdtemp(join(homedir(), '.cache/diskformer-gate-'));
 const chrome = spawn(process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   ['--headless=new', '--no-first-run', `--user-data-dir=${profile}`, '--enable-unsafe-webgpu', `--remote-debugging-port=${cdp}`, 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -59,14 +61,10 @@ for (const t0 = Date.now(); Date.now() - t0 < Number(arg('minutes', 120)) * 60e3
 }
 const result = gate ? { file, refs, slots: Number(arg('slots', '8')), same: gate.same, total: gate.total, error: gate.error,
   differ: (gate.results || []).filter((r) => !r.ok).map((r) => r.name), texts: (gate.results || []).map((r) => ({ name: r.name, ok: r.ok, text: r.text })) } : { file, refs, error: 'timed out' };
-// remove the OPFS copy by name, from a page on the same origin with no worker holding it
-if (!process.argv.includes('--keep')) {
-  await send('Page.navigate', { url: `http://127.0.0.1:${port}/ggml/dist/BUILD.md` });
-  await sleep(1500);
-  result.removed = await ev(`(async () => { const d = await (await navigator.storage.getDirectory()).getDirectoryHandle('gguf'); for (const n of [${JSON.stringify(file)}, ${JSON.stringify(file + '.part')}, ${JSON.stringify(file + '.part.json')}]) { try { await d.removeEntry(n); } catch {} } return true; })()`);
-}
 if (arg('out')) await writeFile(arg('out'), JSON.stringify(result, null, 1));
 console.log(JSON.stringify({ ...result, texts: undefined }));
 try { chrome.kill(); } catch {}
+await new Promise((r) => { if (chrome.exitCode !== null) r(); else { chrome.once('exit', r); setTimeout(r, 10000); } });
+if (own) await rm(profile, { recursive: true, force: true });
 server.close();
 process.exit(result.error ? 2 : 0);
