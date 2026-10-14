@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp fork build 11474 (e2ac18e28), WebGPU, experts paged (8 slots), -ngl 99: llama-server /completion on the /apply-template prompt, temperature 0, max_tokens 64, on Hy-MT2-30B-A3B-Q4_K_M.gguf (sha256 bb44b11bb0f7cd3d1321645b41e911cd3de2e473731227fc6bf37aa18b543f88). Recorded 2026-10-13 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<｜hy_begin▁of▁sentence｜><｜reasoning_mode｜>reasoning_effort:no_think<｜hy_User｜>Explain the difference between TCP and UDP to a new programmer.<｜hy_Assistant｜><think></think>",
+   "content": "Sure! Let’s break down the difference between **TCP** and **UDP** in a simple way—perfect for a new programmer.\n\n---\n\n### 🔗 What Are TCP and UDP?\n\nBoth TCP and UDP are **protocols** used for sending data over a network. Think of them as different \"",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<｜hy_begin▁of▁sentence｜><｜reasoning_mode｜>reasoning_effort:no_think<｜hy_User｜>Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<｜hy_Assistant｜><think></think>",
+   "content": "{\"name\": \"Priya\", \"city\": \"Lisbon\", \"age\": 34}",
+   "finish": "stop",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<｜hy_begin▁of▁sentence｜><｜reasoning_mode｜>reasoning_effort:no_think<｜hy_User｜>Translate into Hindi: \"The library opens at nine and closes at six.\"<｜hy_Assistant｜><think></think>",
+   "content": "\"पुस्तकालय सुबह नौ बजे खुलता है और शाम छह बजे बंद होता है।\"",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<｜hy_begin▁of▁sentence｜><｜reasoning_mode｜>reasoning_effort:no_think<｜hy_User｜>A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<｜hy_Assistant｜><think></think>",
+   "content": "**Step‑by‑step**\n\n1. **Convert times to minutes since midnight**  \n   - 14:10 → 14 × 60 + 10 = **850 min**  \n   - 17:45 → 17 × 60 + 45 = **1065",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<｜hy_begin▁of▁sentence｜><｜reasoning_mode｜>reasoning_effort:no_think<｜hy_User｜>Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<｜hy_Assistant｜><think></think>",
+   "content": "Here's a SQL query that returns the five customers with the highest total order value:\n\n```sql\nSELECT \n    c.id,\n    c.name,\n    SUM(o.amount) AS total_order_value\nFROM \n    customers c\nJOIN \n    orders o ON c.id = o.customer_id\nGROUP",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<｜hy_begin▁of▁sentence｜><｜reasoning_mode｜>reasoning_effort:no_think<｜hy_User｜>List five major rivers of Africa, one per line, with the country where each reaches the sea.<｜hy_Assistant｜><think></think>",
+   "content": "Nile – Egypt  \nCongo – Democratic Republic of the Congo  \nNiger – Nigeria  \nZambezi – Mozambique  \nOrange – South",
+   "finish": "stop",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<｜hy_begin▁of▁sentence｜><｜reasoning_mode｜>reasoning_effort:no_think<｜hy_User｜>What do these emoji usually mean in a text message: 🙏 🔥 💀 ?<｜hy_Assistant｜><think></think>",
+   "content": "These three emojis are often used together in texts to convey a mix of gratitude, enthusiasm, and humor—especially in casual or playful conversations. Here’s what each usually means in context:\n\n- **🙏 (Praying hands)**: Expresses gratitude, appreciation, or a wish for good fortune",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<｜hy_begin▁of▁sentence｜><｜reasoning_mode｜>reasoning_effort:no_think<｜hy_User｜>Write a haiku about autumn leaves in a city.<｜hy_Assistant｜><think></think>",
+   "content": "Crimson leaves drift down,  \nOn concrete streets, soft whispers—  \nCity breathes in",
+   "finish": "stop",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<｜hy_begin▁of▁sentence｜>Answer like a cheerful pirate, in two sentences.<｜reasoning_mode｜>reasoning_effort:no_think<｜hy_User｜>What is the boiling point of water at sea level?<｜hy_Assistant｜><think></think>",
+   "content": "Arrr! Water boils at 100 degrees Celsius when the sun’s high and the sea’s calm, matey! That’s the magic number for a proper pirate brew!",
+   "finish": "stop",
+   "tokens": 41
+  }
+ ]
+}

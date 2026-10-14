@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.1 (2026-10-14)
+- The browser build (`diskformer/llama`) is rebuilt on the fork after merging upstream llama.cpp (fork `377491df7`, 167
+  upstream commits including the MUL_MAT_ID rewrite #30451); checksums in `ggml/dist/BUILD.md`. Every gated model was
+  rechecked in Chrome on it: 15 of 15 at their earlier result or within one reply (gpt-oss 8/9 to 7/9).
+- Chat prompts are tokenized part by part: template text with its special tokens, user text as plain text, so text a
+  user types cannot become a control token.
+- Coverage: 16 architectures pass both checks, adding Nemotron 3 Nano (nemotron_h_moe) and Ling 3.0 tiny (bailingmoe3),
+  and Gemma 4 on the llama.cpp path (8/9). Table: `docs/coverage.md`.
+- Demo: Qwen3.6 35B-A3B, GLM-4.7-Flash, LFM2.5 24B-A2B, ERNIE 4.5 21B-A3B, Ling mini 2.0 and Mellum2 in the model list.
+
 ## 0.5.0 (2026-10-14)
 - Added: `diskformer/llama`, the llama.cpp path in the package. `ggml/llama.js` (`Llama`: download, list, remove, load,
   chat, complete, abort) drives `ggml/worker.mjs`, which runs `ggml/dist/df-chat.wasm`: llama.cpp with WebGPU, the MoE

@@ -314,8 +314,26 @@ extern "C" EMSCRIPTEN_KEEPALIVE int df_load(const char * path, int n_slots, int 
 
 // Greedy continuation of an already formatted prompt, at most n_predict tokens. Pieces stream through df_emit;
 // returns the whole continuation.
+static const char * df_complete_tokens(std::vector<llama_token> tokens, int n_predict);
+
 extern "C" EMSCRIPTEN_KEEPALIVE const char * df_complete(const char * prompt, int n_predict) {
-    std::vector<llama_token> tokens = common_tokenize(g_ctx, prompt, true, true);
+    return df_complete_tokens(common_tokenize(g_ctx, prompt, true, true), n_predict);
+}
+
+// A rendered chat prompt, part by part: template text with its special tokens, user text as plain text (a user who
+// types "<|im_start|>" gets those characters, not the control token).
+static std::vector<llama_token> df_tokenize_prompt(const common_chat_prompt & prompt) {
+    std::vector<llama_token> tokens;
+    bool                     first = true;
+    for (const auto & part : prompt.parts) {
+        const auto t = common_tokenize(g_ctx, part.text, first, !part.is_input);
+        tokens.insert(tokens.end(), t.begin(), t.end());
+        first = false;
+    }
+    return tokens;
+}
+
+static const char * df_complete_tokens(std::vector<llama_token> tokens, int n_predict) {
     const llama_vocab *      vocab  = llama_model_get_vocab(g_model);
     llama_memory_clear(llama_get_memory(g_ctx), true);
 
@@ -399,18 +417,18 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char * df_complete(const char * prompt, in
 // One user turn through the model's chat template (jinja), greedy.
 // The chat template applied to `inputs`, then a greedy reply; a template that fails reports why instead of throwing.
 static const char * df_complete_chat(const common_chat_templates_inputs & inputs, int n_predict) {
-    std::string prompt;
+    std::vector<llama_token> tokens;
     try {
         if (!g_tmpls) {
             throw std::runtime_error("no chat template (it failed to load)");
         }
-        prompt = common_chat_templates_apply(g_tmpls.get(), inputs).prompt;
+        tokens = df_tokenize_prompt(common_chat_templates_apply(g_tmpls.get(), inputs).prompt);
     } catch (const std::exception & e) {
         fprintf(stderr, "df_chat: chat template failed: %s\n", e.what());
         g_out = std::string("[chat template failed: ") + e.what() + "]";
         return g_out.c_str();
     }
-    return df_complete(prompt.c_str(), n_predict);
+    return df_complete_tokens(std::move(tokens), n_predict);
 }
 
 extern "C" EMSCRIPTEN_KEEPALIVE const char * df_chat(const char * user, int n_predict) {

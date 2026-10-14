@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp fork build 11475 (f97fbe00d), CPU, -ngl 0: llama-server /completion on the /apply-template prompt, temperature 0, max_tokens 64, on Laguna-XS-2.1-Q4_K_M.gguf (sha256 1ac7079101fca5a6df8c5a7523a3c30ea7d1c0e4b1258090e7d6d4039287f6cb). Recorded 2026-10-14 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<system>You are a helpful, conversationally-fluent assistant made by Poolside. You are here to be helpful to users through natural language conversations.</system>\n<user>Explain the difference between TCP and UDP to a new programmer.</user>\n<assistant><think>",
+   "content": "Okay, I need to explain the difference between TCP and UDP to a new programmer. Let me start by recalling what I know about these protocols. Both are part of the transport layer in the OSI model, right? They handle communication between applications, but they do it differently.\n\nTCP is Transmission Control Protocol, and UDP",
+   "finish": "limit",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<system>You are a helpful, conversationally-fluent assistant made by Poolside. You are here to be helpful to users through natural language conversations.</system>\n<user>Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"</user>\n<assistant><think>",
+   "content": "Okay, let's see. The user wants me to extract the name, city, and age from the sentence \"Priya, 34, moved from Pune to Lisbon",
+   "finish": "limit",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<system>You are a helpful, conversationally-fluent assistant made by Poolside. You are here to be helpful to users through natural language conversations.</system>\n<user>Translate into Hindi: \"The library opens at nine and closes at six.\"</user>\n<assistant><think>",
+   "content": "Okay, the user wants to translate the sentence \"The library opens at nine and closes at six.\" into Hindi. Let me start by breaking down the sentence.\n\nFirst, \"The library\" in Hindi is \"पुस्तकालय\". Next, \"opens at nine\" – \"opens\" is",
+   "finish": "limit",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<system>You are a helpful, conversationally-fluent assistant made by Poolside. You are here to be helpful to users through natural language conversations.</system>\n<user>A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.</user>\n<assistant><think>",
+   "content": "Okay, so I need to figure out how long the train journey is from 14:10 to 17:45. Hmm, let's see. I remember that to calculate the duration between two times, you subtract the start time from the end time. But I need to make sure I do",
+   "finish": "limit",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<system>You are a helpful, conversationally-fluent assistant made by Poolside. You are here to be helpful to users through natural language conversations.</system>\n<user>Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).</user>\n<assistant><think>",
+   "content": "Okay, I need to write a SQL query that finds the five customers with the highest total order value. Let me think about how to approach this.\n\nFirst, there are two tables: customers and orders. The customers table has id and name, and the orders table has id, customer_id, and amount. So",
+   "finish": "limit",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<system>You are a helpful, conversationally-fluent assistant made by Poolside. You are here to be helpful to users through natural language conversations.</system>\n<user>List five major rivers of Africa, one per line, with the country where each reaches the sea.</user>\n<assistant><think>",
+   "content": "Okay, I need to list five major rivers of Africa, each on a separate line, along with the country where each river reaches the sea.",
+   "finish": "limit",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<system>You are a helpful, conversationally-fluent assistant made by Poolside. You are here to be helpful to users through natural language conversations.</system>\n<user>What do these emoji usually mean in a text message: 🙏 🔥 💀 ?</user>\n<assistant><think>",
+   "content": "Okay, the user is asking about the meanings of the emojis 🙏, 🔥, and 💀 in text messages. Let me start by recalling each emoji's common interpretations.\n\nFirst, 🙏 is the folded hands emoji. I know it's often used to represent prayer or a request for help, but in",
+   "finish": "limit",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<system>You are a helpful, conversationally-fluent assistant made by Poolside. You are here to be helpful to users through natural language conversations.</system>\n<user>Write a haiku about autumn leaves in a city.</user>\n<assistant><think>",
+   "content": "Okay, the user wants a haiku about autumn leaves in a city. Let me start by recalling the",
+   "finish": "limit",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<system>Answer like a cheerful pirate, in two sentences.</system>\n<user>What is the boiling point of water at sea level?</user>\n<assistant><think>",
+   "content": "Okay, the user is asking for the boiling point of water at sea level. Let me recall what I know. From basic science, water boils at 100 degrees Celsius under standard atmospheric pressure,",
+   "finish": "limit",
+   "tokens": 41
+  }
+ ]
+}

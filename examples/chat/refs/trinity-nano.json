@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp b9830 (c1a1c8ee9), Metal, -ngl 99: llama-server /completion on the /apply-template prompt, temperature 0, max_tokens 64, on Trinity-Nano-Preview-Q4_K_M.gguf (sha256 287562a3824ce2277e2c71cfcc70248b2d90f7fa342a4779979e0bf3e37ad546). Recorded 2026-10-13 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<|im_start|>user\nExplain the difference between TCP and UDP to a new programmer.<|im_end|>\n<|im_start|>assistant\n",
+   "content": "Sure! Let's break down the differences between TCP (Transmission Control Protocol) and UDP (User Datagram Protocol) for a new programmer.\n\n**1. Reliability:**\n- **TCP**: Is reliable. It ensures that data is delivered correctly and in order. If packets are lost, TCP will retransmit them.\n- **UDP",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<|im_start|>user\nExtract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<|im_end|>\n<|im_start|>assistant\n",
+   "content": "To extract the name, city, and age from the given sentence and format it as JSON, I'll follow these steps:\n\n1. Identify the name: \"Priya\"\n",
+   "finish": "stop",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<|im_start|>user\nTranslate into Hindi: \"The library opens at nine and closes at six.\"<|im_end|>\n<|im_start|>assistant\n",
+   "content": "To translate \"The library opens at nine and closes at six\" into Hindi, we need to consider the grammatical structure and the specific words. Here's how it can be translated:\n\n\"कल्पिका कल्पिका कल्पिका कल्पिका कल्पिका कल",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<|im_start|>user\nA train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<|im_end|>\n<|im_start|>assistant\n",
+   "content": "To find the duration of the journey, I need to calculate the time difference between the departure and arrival.\n\nThe train departs at 14:10 and arrives at 17:45. Let me break this down step by step.\n\nFirst, let's consider the time from departure to arrival. The train leaves at 14",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<|im_start|>user\nWrite a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<|im_end|>\n<|im_start|>assistant\n",
+   "content": "To determine the five customers with the highest total order value, you'll need to join the `customers` and `orders` tables and then sort the results. Here's how you can structure the SQL query:\n\n```sql\nSELECT \n    c.id AS customer_id,\n    c.name AS customer_name,\n    o.amount",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<|im_start|>user\nList five major rivers of Africa, one per line, with the country where each reaches the sea.<|im_end|>\n<|im_start|>assistant\n",
+   "content": "1. Nile  \n2. Congo  \n3. Niger  \n4. Zambezi  \n5. Orange",
+   "finish": "stop",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<|im_start|>user\nWhat do these emoji usually mean in a text message: 🙏 🔥 💀 ?<|im_end|>\n<|im_start|>assistant\n",
+   "content": "In a text message, these emojis typically convey:\n\n- 🙏 (hands together): This often represents prayer, gratitude, or a gesture of asking for something.\n- 🔥 (fire): This usually means excitement, energy, or a strong reaction.\n- 💀 (skull): This typically represents death, finality, or",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<|im_start|>user\nWrite a haiku about autumn leaves in a city.<|im_end|>\n<|im_start|>assistant\n",
+   "content": "Here is a haiku about autumn leaves in a city:\n\nAutumn whispers in the streets  \nLeaves dance in the",
+   "finish": "stop",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<|im_start|>system\nAnswer like a cheerful pirate, in two sentences.<|im_end|>\n<|im_start|>user\nWhat is the boiling point of water at sea level?<|im_end|>\n<|im_start|>assistant\n",
+   "content": "The boiling point of water at sea level is 100 degrees Celsius, or 212 degrees Fahrenheit. As a jolly pirate, I'd say it's a fine thing, but it's just water, after",
+   "finish": "stop",
+   "tokens": 41
+  }
+ ]
+}

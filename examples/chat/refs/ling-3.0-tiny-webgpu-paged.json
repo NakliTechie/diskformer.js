@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp fork build 11474 (e2ac18e28), WebGPU, experts paged (8 slots), -ngl 99: llama-server /v1/chat/completions, temperature 0, max_tokens 64, on Ling-3.0-tiny-Q4_K_M.gguf (sha256 5eb12d8150f502e5ef15c05f0a03aec72ef8b8319fbaa8b2e03b43754ce9f2c5). Recorded 2026-10-13 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>detailed thinking on<|role_end|><role>HUMAN</role>Explain the difference between TCP and UDP to a new programmer.<|role_end|><role>ASSISTANT</role>\n<think>",
+   "content": "Hmm, the user is a new programmer asking about the difference between TCP and UDP. This is a fundamental networking concept, so I should start with a clear, relatable analogy to make it intuitive. \n\nI can use the postal system analogy—TCP as regular mail with tracking and UDP as a postcard. That should",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>detailed thinking on<|role_end|><role>HUMAN</role>Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<|role_end|><role>ASSISTANT</role>\n<think>",
+   "content": "The user wants me to extract specific fields from a sentence and return them as JSON.\n\nThe sentence is: \"Priya, 34, moved from Pune to",
+   "finish": "length",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>detailed thinking on<|role_end|><role>HUMAN</role>Translate into Hindi: \"The library opens at nine and closes at six.\"<|role_end|><role>ASSISTANT</role>\n<think>",
+   "content": "The user wants me to translate an English sentence into Hindi. Let me translate \"The library opens at nine and closes at six.\"\n\n\"The library\" = \"संग्रहालय\" or \"पुस्तकालय\" (library)\n\"opens at nine\" =",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>detailed thinking on<|role_end|><role>HUMAN</role>A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<|role_end|><role>ASSISTANT</role>\n<think>",
+   "content": "We are asked: \"A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.\"\n\nWe need to compute the duration from 14:10 to 17:45.\n\nWe can do",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>detailed thinking on<|role_end|><role>HUMAN</role>Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<|role_end|><role>ASSISTANT</role>\n<think>",
+   "content": "1.  **Understand the Goal:** The objective is to write a SQL query that finds the top 5 customers based on their total order value.\n\n2.  **Identify the Tables and Columns:**\n    *   `customers` table: `id`, `name`\n    *   `orders`",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>detailed thinking on<|role_end|><role>HUMAN</role>List five major rivers of Africa, one per line, with the country where each reaches the sea.<|role_end|><role>ASSISTANT</role>\n<think>",
+   "content": "First, the user asked: \"List five major rivers of Africa, one per line, with the country where each reaches the sea.\" So,",
+   "finish": "length",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>detailed thinking on<|role_end|><role>HUMAN</role>What do these emoji usually mean in a text message: 🙏 🔥 💀 ?<|role_end|><role>ASSISTANT</role>\n<think>",
+   "content": "The user is asking about the common meanings of three emojis in text messaging: 🙏, 🔥, and 💀. Let me think about the typical usage of each emoji in casual texting.\n\n1. 🙏 - This is the \"praying hands\" emoji. It's commonly used to:",
+   "finish": "length",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>detailed thinking on<|role_end|><role>HUMAN</role>Write a haiku about autumn leaves in a city.<|role_end|><role>ASSISTANT</role>\n<think>",
+   "content": "Hmm, the user wants a haiku about autumn leaves in a city. A haiku has a specific",
+   "finish": "length",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<role>SYSTEM</role>Answer like a cheerful pirate, in two sentences.\ndetailed thinking on<|role_end|><role>HUMAN</role>What is the boiling point of water at sea level?<|role_end|><role>ASSISTANT</role>\n<think>",
+   "content": "1.  **Analyze the Request:**\n    *   Question: What is the boiling point of water at sea level?\n    *   Constraint 1: Answer like a cheerful pirate.\n   ",
+   "finish": "length",
+   "tokens": 41
+  }
+ ]
+}

@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp fork build 11474 (e2ac18e28), WebGPU, experts paged (8 slots), -ngl 99: llama-server /completion on the /apply-template prompt, temperature 0, max_tokens 64, on NVIDIA-Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf (sha256 0f111a0d49777a2a0178758b1aee14e5365c495987499401ef3ebe87754322a8). Recorded 2026-10-14 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<|im_start|>system\n<|im_end|>\n<|im_start|>user\nExplain the difference between TCP and UDP to a new programmer.<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "We need to explain TCP vs UDP to a new programmer. Should be clear, simple, maybe with analogies, mention reliability, ordering, flow control, connection-oriented vs connectionless, ports, use cases. Provide examples. Probably also mention headers, ports, etc. Should be friendly.\n</think>\n## TCP vs.",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<|im_start|>system\n<|im_end|>\n<|im_start|>user\nExtract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "We need to extract name, city, age from sentence: \"Priya, 34, moved from Pune to Lisbon last year.\"\n\nName: Priya\nAge",
+   "finish": "stop",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<|im_start|>system\n<|im_end|>\n<|im_start|>user\nTranslate into Hindi: \"The library opens at nine and closes at six.\"<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "The user wants translation into Hindi of the sentence: \"The library opens at nine and closes at six.\"\n\nWe need to provide Hindi translation. Probably: \"लाइब्रेरी सुबह 9 बजे खुलती है और शाम 6 बजे बंद होती है।\" Or \"बजे",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<|im_start|>system\n<|im_end|>\n<|im_start|>user\nA train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "We need to answer: train leaves at 14:10, arrives at 17:45. Compute duration. Steps briefly. So compute from 14:10 to 17:45. Hours: 3 hours from 14:10 to 17:",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<|im_start|>system\n<|im_end|>\n<|im_start|>user\nWrite a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "We need to write a SQL query returning the five customers with highest total order value. Tables: customers(id, name) and orders(id, customer_id, amount). Need to sum amount per customer, order by sum desc, limit 5. Possibly include customer name and total. Use JOIN and GROUP BY. Provide",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<|im_start|>system\n<|im_end|>\n<|im_start|>user\nList five major rivers of Africa, one per line, with the country where each reaches the sea.<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "The user wants: \"List five major rivers of Africa, one per line, with the country where each reaches the sea.\"\n\nInterpretation:",
+   "finish": "stop",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<|im_start|>system\n<|im_end|>\n<|im_start|>user\nWhat do these emoji usually mean in a text message: 🙏 🔥 💀 ?<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "The user asks: \"What do these emoji usually mean in a text message: 🙏 🔥 💀 ?\" They want explanation of typical meanings. Provide interpretation. Should be concise but thorough. Use friendly tone. No disallowed content. Provide context.\n</think>\nHere’s a quick rundown",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<|im_start|>system\n<|im_end|>\n<|im_start|>user\nWrite a haiku about autumn leaves in a city.<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "Okay, the user asked for a haiku about autumn leaves in a city. Hmm, they probably want",
+   "finish": "stop",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<|im_start|>system\nAnswer like a cheerful pirate, in two sentences.<|im_end|>\n<|im_start|>user\nWhat is the boiling point of water at sea level?<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "We need to answer like a cheerful pirate, in two sentences. Provide the boiling point of water at sea level: 100°C (212°F). Two sentences, cheerful pirate tone",
+   "finish": "stop",
+   "tokens": 41
+  }
+ ]
+}

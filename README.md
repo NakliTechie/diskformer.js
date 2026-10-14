@@ -34,8 +34,8 @@ once. Measured in Chrome on a MacBook Pro M4 Pro, 24 GB, 2026-10-13 (the recordi
 | OLMoE 1B-7B, Q4_K_M | 4.21 GB | 3.92 GB | 22.4 tok/s | 9/9 identical |
 | LFM2 8B-A1B, Q4_K_M | 5.04 GB | 3.89 GB | 17.1 tok/s | 9/9 identical |
 
-Gated the same way (paged replies identical across slot counts, then Chrome against llama.cpp): Gemma 4, Qwen3, Qwen3.6,
-Qwen3-VL, OLMoE, LFM2, LFM2.5, Granite 4.0 H, gpt-oss, ERNIE 4.5, GLM-4.7-Flash, Mellum2, Ling 2.0, North. Refs: `examples/chat/refs/`.
+16 architectures pass both checks (paging exact natively, then Chrome against llama.cpp): Gemma 4, Qwen3, Qwen3-Next, Qwen3.6,
+Qwen3-VL, GLM-4.7-Flash, Nemotron 3, ERNIE 4.5, gpt-oss, North, LFM2/2.5, Mellum2, Ling 2.0/3.0, Granite 4.0 H, OLMoE. [docs/coverage.md](docs/coverage.md).
 
 The hand-written engines, measured on a MacBook M4 Pro with 24 GB, Chrome 154, on 2026-10-05:
 
