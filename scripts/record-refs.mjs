@@ -68,10 +68,13 @@ async function complete(prompt, maxTokens) {
       const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
       if (!line.startsWith('data:')) continue;
       const d = JSON.parse(line.slice(5));
+      if (d.error) throw new Error(`/completion: ${JSON.stringify(d.error)}`);
       content += d.content || '';
       if (d.stop) finish = d.stopped_limit ? 'length' : 'stop';
     }
   }
+  // a stream that ends without its stop line was cut (the server failed mid-reply, e.g. out of Metal memory)
+  if (finish === null) throw new Error(`/completion: the reply stream ended without finishing (${content.length} chars)`);
   return { content, finish };
 }
 

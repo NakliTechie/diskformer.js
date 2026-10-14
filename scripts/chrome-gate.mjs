@@ -21,11 +21,18 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/ja
 async function inside(base, rel) {
   try { const p = await realpath(join(base, rel)); return p.startsWith(base + sep) && (await stat(p)).isFile() ? p : null; } catch { return null; }
 }
+async function linkInside(base, rel) {
+  const p = join(base, rel);
+  if (!p.startsWith(base + sep) || p.slice(base.length + 1).includes(sep)) return null;
+  try { return (await stat(p)).isFile() ? p : null; } catch { return null; }
+}
 const server = createServer(async (req, res) => {
   try {
     const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname));
     const fromModels = path.startsWith('/models/');
-    const p = await inside(fromModels ? models : root, fromModels ? path.slice(8) : path);
+    // --models may hold links to the files elsewhere (gated GGUFs move to an external disk): the name must be inside
+    // the folder, its target need not be
+    const p = fromModels ? await linkInside(models, path.slice(8)) : await inside(root, path);
     if (!p) { res.writeHead(404).end(); return; }
     if (!fromModels) { res.writeHead(200, { 'Content-Type': types[extname(p)] || 'application/octet-stream', 'Cache-Control': 'no-store' }).end(await readFile(p)); return; }
     const size = (await stat(p)).size;
@@ -42,6 +49,21 @@ const profile = arg('profile') || await mkdtemp(join(homedir(), '.cache/diskform
 const chrome = spawn(process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   ['--headless=new', '--no-first-run', `--user-data-dir=${profile}`, '--enable-unsafe-webgpu', `--remote-debugging-port=${cdp}`, 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Chrome's helper processes write into the profile for a moment after the main process exits: retry the delete
+const dropProfile = async () => {
+  if (!own) return;
+  for (let k = 0; k < 10; k++) {
+    try { await rm(profile, { recursive: true, force: true }); return; } catch { await sleep(1000); }
+  }
+  console.error(`could not delete the gate profile ${profile}`);
+};
+// stopped from outside (timeout, kill): take Chrome and its throwaway profile down too, so no copy is left behind
+for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, async () => {
+  try { chrome.kill(); } catch {}
+  await new Promise((r) => { chrome.once('exit', r); setTimeout(r, 5000); });
+  await dropProfile();
+  process.exit(3);
+});
 let ws;
 for (let k = 0; k < 100 && !ws; k++) { try { const t = (await (await fetch(`http://127.0.0.1:${cdp}/json`)).json()).find((x) => x.type === 'page'); ws = new WebSocket(t.webSocketDebuggerUrl); } catch { await sleep(200); } }
 await new Promise((r) => { ws.onopen = r; });
@@ -52,12 +74,14 @@ const ev = async (expression) => { const r = await send('Runtime.evaluate', { ex
 const size = (await stat(join(models, file))).size;
 const q = new URLSearchParams({ model: file, refs: '/' + refs.replace(/^\//, ''), slots: arg('slots', '8'), url: `/models/${file}`, size: String(size) });
 await send('Page.navigate', { url: `http://127.0.0.1:${port}/ggml/gate.html?${q}` });
-let gate = null, last = '';
+let gate = null, last = '', lastAt = Date.now();
+const stall = Number(arg('stall', 10)) * 60e3;   // no new line on the page for this long: the gate is stuck
 for (const t0 = Date.now(); Date.now() - t0 < Number(arg('minutes', 120)) * 60e3 && !gate; await sleep(2000)) {
   gate = await ev('window.gate || null');
   const out = await ev('(document.getElementById("out") || {}).textContent || ""');
   const line = out.split('\n').pop();
-  if (line && line !== last) { console.error(`${new Date().toTimeString().slice(0, 8)} ${line}`); last = line; }
+  if (line && line !== last) { console.error(`${new Date().toTimeString().slice(0, 8)} ${line}`); last = line; lastAt = Date.now(); }
+  if (!gate && Date.now() - lastAt > stall) { gate = { error: `stalled: no progress for ${stall / 60e3} min after "${last}"` }; console.error(gate.error); }
 }
 const result = gate ? { file, refs, slots: Number(arg('slots', '8')), same: gate.same, total: gate.total, error: gate.error,
   differ: (gate.results || []).filter((r) => !r.ok).map((r) => r.name), texts: (gate.results || []).map((r) => ({ name: r.name, ok: r.ok, text: r.text })) } : { file, refs, error: 'timed out' };
@@ -65,6 +89,6 @@ if (arg('out')) await writeFile(arg('out'), JSON.stringify(result, null, 1));
 console.log(JSON.stringify({ ...result, texts: undefined }));
 try { chrome.kill(); } catch {}
 await new Promise((r) => { if (chrome.exitCode !== null) r(); else { chrome.once('exit', r); setTimeout(r, 10000); } });
-if (own) await rm(profile, { recursive: true, force: true });
+await dropProfile();
 server.close();
 process.exit(result.error ? 2 : 0);

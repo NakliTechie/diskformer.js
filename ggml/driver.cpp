@@ -16,6 +16,7 @@
 #include <clocale>
 #include <cstdio>
 #include <cstdlib>
+#include <stdexcept>
 #include <regex>
 #include <string>
 #include <thread>
@@ -300,7 +301,14 @@ extern "C" EMSCRIPTEN_KEEPALIVE int df_load(const char * path, int n_slots, int 
     if (g_ctx == nullptr) {
         return 3;
     }
-    g_tmpls = common_chat_templates_init(g_model, "");
+    // a template llama.cpp's jinja cannot parse must not take the model down: raw prompts (df_complete) still work,
+    // and chat calls report the failure
+    try {
+        g_tmpls = common_chat_templates_init(g_model, "");
+    } catch (const std::exception & e) {
+        fprintf(stderr, "df_load: chat template failed: %s\n", e.what());
+        g_tmpls.reset();
+    }
     return 0;
 }
 
@@ -389,6 +397,22 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char * df_complete(const char * prompt, in
 }
 
 // One user turn through the model's chat template (jinja), greedy.
+// The chat template applied to `inputs`, then a greedy reply; a template that fails reports why instead of throwing.
+static const char * df_complete_chat(const common_chat_templates_inputs & inputs, int n_predict) {
+    std::string prompt;
+    try {
+        if (!g_tmpls) {
+            throw std::runtime_error("no chat template (it failed to load)");
+        }
+        prompt = common_chat_templates_apply(g_tmpls.get(), inputs).prompt;
+    } catch (const std::exception & e) {
+        fprintf(stderr, "df_chat: chat template failed: %s\n", e.what());
+        g_out = std::string("[chat template failed: ") + e.what() + "]";
+        return g_out.c_str();
+    }
+    return df_complete(prompt.c_str(), n_predict);
+}
+
 extern "C" EMSCRIPTEN_KEEPALIVE const char * df_chat(const char * user, int n_predict) {
     common_chat_msg msg;
     msg.role    = "user";
@@ -397,8 +421,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char * df_chat(const char * user, int n_pr
     inputs.use_jinja             = true;
     inputs.messages              = { msg };
     inputs.add_generation_prompt = true;
-    const std::string prompt     = common_chat_templates_apply(g_tmpls.get(), inputs).prompt;
-    return df_complete(prompt.c_str(), n_predict);
+    return df_complete_chat(inputs, n_predict);
 }
 
 // A whole conversation through the model's chat template (jinja), greedy: messages as JSON [{"role","content"}, ...].
@@ -413,8 +436,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char * df_chat_messages(const char * messa
         inputs.messages.push_back(msg);
     }
     inputs.add_generation_prompt = true;
-    const std::string prompt     = common_chat_templates_apply(g_tmpls.get(), inputs).prompt;
-    return df_complete(prompt.c_str(), n_predict);
+    return df_complete_chat(inputs, n_predict);
 }
 
 // Stops the reply in progress at the next token.

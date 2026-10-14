@@ -193,6 +193,11 @@ onmessage = async ({ data }) => {
       post('done', { text: text(reply), stats: JSON.parse(text(mod._df_stats())) });
     }
   } catch (e) {
-    post('error', { message: String(e?.message ?? e), stack: String(e?.stack ?? '') });
+    // a C++ exception from the wasm arrives as a WebAssembly.Exception: report its message, not "[object ...]"
+    let message = String(e?.message ?? e);
+    if (typeof WebAssembly.Exception === 'function' && e instanceof WebAssembly.Exception && mod?.getExceptionMessage) {
+      try { message = `C++ exception: ${mod.getExceptionMessage(e).filter(Boolean).join(': ')}`; } catch {}
+    }
+    post('error', { message, stack: String(e?.stack ?? '') });
   }
 };
