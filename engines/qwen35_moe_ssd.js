@@ -15,7 +15,8 @@
  *   const m = await Qwen35MoeSsd.load(null, { url: '…/Qwen3.6-35B-A3B-Q8_0.gguf', poolBytes });
  */
 
-import { Qwen3MoeSsd, STORAGE, COPY_SRC, COPY_DST, MAP_READ, UNIFORM, I8 } from './qwen3_moe_ssd.js';
+import { MiniCpmVVision, planImage, preprocessImage, roundEven } from './minicpmv_vision.js';
+import { Qwen3MoeSsd, STORAGE, COPY_SRC, COPY_DST, MAP_READ, UNIFORM, I8, TOK, Q6K_BLOCK, Q4_KERNELS, Q4_SG_KERNELS, Q4_BATCH_KERNELS } from './qwen3_moe_ssd.js';
 
 export const QWEN36_35B_A3B = {
   repo: 'unsloth/Qwen3.6-35B-A3B-GGUF',
@@ -164,6 +165,26 @@ ${SIGMOID}
 }`,
 };
 
+
+// Q4_0 token embedding (the Q4_0 files): value e of the table from the nibble plane (byte j of a 32-value block
+// holds values j and j + 16, as matmulQ4T reads it) times its block's f16 scale.
+const Q4AT = 'fn q4at(e: u32) -> f32 { let by = (e >> 5u) * 16u + (e & 15u); return f32((q[by >> 2u] >> ((by & 3u) * 8u + ((e >> 4u) & 1u) * 4u)) & 15u) - 8.0; }';
+const Q4_EMBED = {
+  embedQ4: `enable f16;
+${TOK}
+struct P { n: u32 }
+@group(0) @binding(0) var<storage, read> q: array<u32>;
+@group(0) @binding(1) var<storage, read> s: array<f16>;
+@group(0) @binding(2) var<storage, read_write> y: array<f32>;
+@group(0) @binding(3) var<uniform> tok: Tok;
+@group(0) @binding(4) var<uniform> p: P;
+${Q4AT}
+@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) g: vec3<u32>) {
+  let i = g.x; if (i >= p.n) { return; }
+  let e = tok.token * p.n + i;
+  y[i] = q4at(e) * f32(s[e >> 5u]);
+}`,
+};
 
 // ── Batched prefill: a chunk of T prompt tokens per layer ───────────────────────────────────
 // Every batched buffer is token-major (row t holds token pos0 + t). Q is the per-chunk uniform.
@@ -439,6 +460,29 @@ ${QB}
   for (var d = 0u; d < p.hd; d++) { acc += q[qo + d] * f32(kc[ko + d]); }
   sc[idx] = acc * p.scale;
 }`,
+  // attnScoreB masked by position instead of slot (Qwen35MoeSsd: images; kpos holds each KV slot's position).
+  attnScorePosB: `enable f16;
+struct P { heads: u32, kvHeads: u32, hd: u32, scale: f32 }
+${QB}
+@group(0) @binding(0) var<storage, read> q: array<f32>;
+@group(0) @binding(1) var<storage, read> kc: array<f16>;
+@group(0) @binding(2) var<storage, read_write> sc: array<f32>;
+@group(0) @binding(3) var<uniform> p: P;
+@group(0) @binding(4) var<uniform> qd: Q;
+@group(0) @binding(5) var<storage, read> kpos: array<u32>;
+@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) g: vec3<u32>, @builtin(num_workgroups) ng: vec3<u32>) {
+  let idx = g.y * ng.x * 256u + g.x; let S = qd.S; let T = qd.T;
+  if (idx >= p.heads * T * S) { return; }
+  let h = idx / (T * S); let rem = idx % (T * S); let t = rem / S; let pos = rem % S;
+  // Masked by position, not by slot (llama.cpp's KV mask): an image tile's tokens share one position, so they see
+  // each other; for text, positions rise with the slot and this is the usual causal mask.
+  if (kpos[pos] > kpos[qd.pos0 + t]) { sc[idx] = -3.4e38; return; }
+  let kvh = h / (p.heads / p.kvHeads);
+  let qo = t * p.heads * p.hd + h * p.hd; let ko = pos * p.kvHeads * p.hd + kvh * p.hd;
+  var acc = 0.0;
+  for (var d = 0u; d < p.hd; d++) { acc += q[qo + d] * f32(kc[ko + d]); }
+  sc[idx] = acc * p.scale;
+}`,
   softmaxB: `
 ${QB}
 @group(0) @binding(0) var<storage, read_write> sc: array<f32>;
@@ -473,6 +517,25 @@ ${QB}
   let stride = p.kvHeads * p.hd; let rb = (h * qd.T + t) * qd.S; let last = qd.pos0 + t;
   var acc = 0.0;
   for (var pos = 0u; pos <= last; pos++) { acc += pr[rb + pos] * f32(vc[pos * stride + kvh * p.hd + d]); }
+  y[t * QN + idx] = acc;
+}`,
+  // attnOutB over every key of the chunk (attnScorePosB gives masked ones probability 0; a tile token sees later ones).
+  attnOutPosB: `enable f16;
+struct P { heads: u32, kvHeads: u32, hd: u32, pad: u32 }
+${QB}
+@group(0) @binding(0) var<storage, read> pr: array<f32>;
+@group(0) @binding(1) var<storage, read> vc: array<f16>;
+@group(0) @binding(2) var<storage, read_write> y: array<f32>;
+@group(0) @binding(3) var<uniform> p: P;
+@group(0) @binding(4) var<uniform> qd: Q;
+@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) g: vec3<u32>) {
+  let QN = p.heads * p.hd; let idx = g.x; let t = g.y;
+  if (idx >= QN || t >= qd.T) { return; }
+  let h = idx / p.hd; let d = idx % p.hd; let kvh = h / (p.heads / p.kvHeads);
+  let stride = p.kvHeads * p.hd; let rb = (h * qd.T + t) * qd.S;
+  var acc = 0.0;
+  // Every key of the chunk: a masked one has probability 0 (attnScorePosB's mask), and a tile token sees later ones.
+  for (var pos = 0u; pos < qd.S; pos++) { acc += pr[rb + pos] * f32(vc[pos * stride + kvh * p.hd + d]); }
   y[t * QN + idx] = acc;
 }`,
   sigmoidMulB: `
@@ -564,6 +627,23 @@ ${SIGMOID}
   for (var j = 0u; j < p.k; j++) { acc += bitcast<f32>(sel[sb + p.k + j]) * out[(t * p.k + j) * p.H + h]; }
   let r = t * p.H + h;
   x[r] = (acc + sh[r] * sigm(sg[t])) + x[r];
+}`,
+};
+const Q4_EMBED_B = {
+  embedQ4B: `enable f16;
+struct P { n: u32 }
+${QB}
+@group(0) @binding(0) var<storage, read> q: array<u32>;
+@group(0) @binding(1) var<storage, read> s: array<f16>;
+@group(0) @binding(2) var<storage, read> ids: array<u32>;
+@group(0) @binding(3) var<storage, read_write> y: array<f32>;
+@group(0) @binding(4) var<uniform> p: P;
+@group(0) @binding(5) var<uniform> qd: Q;
+${Q4AT}
+@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) g: vec3<u32>) {
+  let i = g.x; let t = g.y; if (i >= p.n || t >= qd.T) { return; }
+  let e = ids[t] * p.n + i;
+  y[t * p.n + i] = q4at(e) * f32(s[e >> 5u]);
 }`,
 };
 
@@ -674,7 +754,24 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
     if (c.arch !== 'qwen35moe') throw new Error(`Qwen35MoeSsd needs a qwen35moe GGUF, got ${c.arch}`);
     if (c.ssm.dConv !== 4) throw new Error(`gdnConv assumes a 4-tap conv, got ${c.ssm.dConv}`);
     if (c.ssm.dState !== 128 || c.ssm.dInner !== c.ssm.vHeads * c.ssm.dState) throw new Error('gdnStep assumes 128-wide heads');
+    // Weight type: Q8_0 (Qwen3.6, MiniCPM-V Q8_0) or Q4_0 (MiniCPM-V Q4_0: Q4_0 matrices and experts, Q6_K output).
+    // Every projection and the experts share one type, so one set of kernel names serves the whole graph.
+    const dt = manifest.dense.tensors, q4 = dt['token_embd.weight'].type === 'q4';
+    for (const [name, d] of Object.entries(dt)) {
+      if (d.type !== 'f32' && name !== 'output.weight' && d.type !== (q4 ? 'q4' : 'q8')) throw new Error(`${name}: ${d.type} in a ${q4 ? 'Q4_0' : 'Q8_0'} file`);
+    }
+    if (q4 !== (manifest.experts.parts.dQ.bytes * 2 === c.expertFf * c.hidden)) throw new Error('experts and dense weights differ in type');
+    const lm = dt['output.weight'].type;
+    if (!(q4 ? ['q4', 'q6k'] : ['q8']).includes(lm)) throw new Error(`output.weight: ${lm} is not supported in a ${q4 ? 'Q4_0' : 'Q8_0'} file`);
+    this.q4 = q4;
+    this.qk = q4
+      ? { mm: 'matmulQ4', mmT: 'matmulQ4T', ex: 'expertQ4', exB: 'expertQ4B', emb: 'embedQ4', embB: 'embedQ4B', lm: lm === 'q6k' ? 'matmulQ6K' : 'matmulQ4' }
+      : { mm: 'matmulQ8', mmT: 'matmulQ8T', ex: 'expertQ8', exB: 'expertQ8B', emb: 'embedQ8', embB: 'embedQ8B', lm: 'matmulQ8' };
     this.recurrent = Array.from({ length: c.layers }, (_, l) => (l + 1) % c.attnInterval !== 0);
+    // M-RoPE sections (t/y/x/extra pair counts); text uses one position in all of them.
+    const secs = gguf.kv['qwen35moe.rope.dimension_sections'];
+    this.ropeSections = Array.isArray(secs) && secs.length === 4 ? secs.map(Number) : [c.ropeDims / 2, 0, 0, 0];
+    this.tNext = 0;
     // Prompts go through in chunks of up to chunkTokens tokens per layer (one routing readback per
     // layer per chunk); decode stays one token at a time.
     this.batchPrefill = opts.batchPrefill ?? true;
@@ -692,6 +789,22 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
     this.routeWindow = Math.max(1, Math.floor(opts.routeWindow ?? 2));
   }
 
+  // A Q6_K output matrix (the Q4_0 files) is split on the GPU into aligned planes for matmulQ6K, and the raw copy freed.
+  async uploadDense(onProgress) {
+    await super.uploadDense(onProgress);
+    const o = this.w['output.weight'];
+    if (!o.raw) return;
+    const dev = this.device, raw = o.raw, blocks = raw.size / Q6K_BLOCK | 0;
+    const P = (n) => this.buffer(n, STORAGE, 'dense');
+    this.q6 = { ql: P(blocks * 128), qh: P(blocks * 64), sc: P(blocks * 16), dd: P(blocks * 4) };
+    const enc = dev.createCommandEncoder(), pass = enc.beginComputePass();
+    const wg = Math.ceil(blocks / 256), x = Math.min(wg, 65535);
+    this.dispatch(pass, 'q6kPlanes', this.bind('q6kPlanes', [raw, this.q6.ql, this.q6.qh, this.q6.sc, this.q6.dd, this.uniform([blocks])]), x, Math.ceil(wg / x));
+    pass.end(); dev.queue.submit([enc.finish()]);
+    await dev.queue.onSubmittedWorkDone();
+    this.gpuBytes.dense -= raw.size; raw.destroy(); o.raw = null;
+  }
+
   // Subgroup GEMVs replace the scalar ones when subgroups are exactly 32 wide (Apple, most others).
   get subgroupKernels() {
     const i = this.device.adapterInfo || this.opts.adapterInfo || {};
@@ -700,13 +813,14 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
   // With gpuRouting, every one-token kernel carries the stop guard (chunked prefill's do not).
   get kernels() {
     if (!this._kernels) {
-      const k = { ...super.kernels, ...KERNELS, ...(this.subgroupKernels ? SG_KERNELS : {}) };
+      const q4 = this.q4 ? { ...Q4_KERNELS, ...Q4_EMBED, ...(this.subgroupKernels ? Q4_SG_KERNELS : {}) } : {};
+      const k = { ...super.kernels, ...KERNELS, ...(this.subgroupKernels ? SG_KERNELS : {}), ...q4 };
       if (this.routeGuards) for (const n of Object.keys(k)) k[n] = guarded(k[n]);
-      this._kernels = { ...k, ...BATCH_KERNELS, route: ROUTE_KERNEL };
+      this._kernels = { ...k, ...BATCH_KERNELS, ...(this.q4 ? { ...Q4_BATCH_KERNELS, ...Q4_EMBED_B, q6kPlanes: Q4_KERNELS.q6kPlanes } : {}), route: ROUTE_KERNEL };
     }
     return this._kernels;
   }
-  isGuarded(name) { return this.routeGuards && name !== 'route' && !(name in BATCH_KERNELS); }
+  isGuarded(name) { return this.routeGuards && name !== 'route' && !(name in BATCH_KERNELS) && !(name in Q4_BATCH_KERNELS) && !(name in Q4_EMBED_B) && name !== 'q6kPlanes'; }
 
   bind(name, buffers) { return super.bind(name, this.isGuarded(name) ? [...buffers, this.a.stop] : buffers); }
   // Like bind(), but a resource may be { buffer, offset, size }.
@@ -736,10 +850,11 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
     this.kc = []; this.vc = []; this.conv = []; this.ssm = [];
     for (let l = 0; l < c.layers; l++) {
       if (this.recurrent[l]) {
-        this.conv[l] = this.buffer(3 * convDim * 4, STORAGE | COPY_DST, 'state');
-        this.ssm[l] = this.buffer(s.vHeads * s.dState * s.dState * 4, STORAGE | COPY_DST, 'state');
+        this.conv[l] = this.buffer(3 * convDim * 4, STORAGE | COPY_SRC | COPY_DST, 'state');
+        this.ssm[l] = this.buffer(s.vHeads * s.dState * s.dState * 4, STORAGE | COPY_SRC | COPY_DST, 'state');
       } else {
         this.kc[l] = this.buffer(this.maxCtx * kvn * 2, STORAGE, 'kv');
+        this.kpos ||= this.buffer(this.maxCtx * 4, STORAGE | COPY_DST, 'kv');   // position (t) of each KV slot
         this.vc[l] = this.buffer(this.maxCtx * kvn * 2, STORAGE, 'kv');
       }
     }
@@ -778,9 +893,10 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
       lm: U([c.vocab, H]), am: U([c.vocab]),
     };
     const a = this.a, W = this.w;
-    const q8 = (name, x, y, uni) => { const t = W[name]; if (!t || !t.q) throw new Error(`missing Q8_0 tensor ${name}`); return this.bind('matmulQ8', [x, t.q, t.s, y, uni]); };
+    const QK = this.qk;
+    const q8 = (name, x, y, uni) => { const t = W[name]; if (!t || !t.q) throw new Error(`missing quantized tensor ${name}`); return this.bind(QK.mm, [x, t.q, t.s, y, uni]); };
     const raw = (name) => { const t = W[name]; if (!t || !t.raw) throw new Error(`missing F32 tensor ${name}`); return t.raw; };
-    this.g = { embed: this.bind('embedQ8', [W['token_embd.weight'].q, W['token_embd.weight'].s, a.x, this.tok, u.nH]) };
+    this.g = { embed: this.bind(QK.emb, [W['token_embd.weight'].q, W['token_embd.weight'].s, a.x, this.tok, u.nH]) };
     this.layers = [];
     for (let l = 0; l < c.layers; l++) {
       const n = (t) => `blk.${l}.${t}`;
@@ -825,21 +941,23 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
           };
         }),
         // Shared expert: [gate | up] into shgu, SiLU·up, down; its scalar gate logit into sg.
-        shg: this.bindR('matmulQ8', [a.xn, W[n('ffn_gate_shexp.weight')].q, W[n('ffn_gate_shexp.weight')].s, { buffer: a.shgu, offset: 0, size: SF * 4 }, u.shgu]),
-        shu: this.bindR('matmulQ8', [a.xn, W[n('ffn_up_shexp.weight')].q, W[n('ffn_up_shexp.weight')].s, { buffer: a.shgu, offset: SF * 4, size: SF * 4 }, u.shgu]),
+        shg: this.bindR(QK.mm, [a.xn, W[n('ffn_gate_shexp.weight')].q, W[n('ffn_gate_shexp.weight')].s, { buffer: a.shgu, offset: 0, size: SF * 4 }, u.shgu]),
+        shu: this.bindR(QK.mm, [a.xn, W[n('ffn_up_shexp.weight')].q, W[n('ffn_up_shexp.weight')].s, { buffer: a.shgu, offset: SF * 4, size: SF * 4 }, u.shgu]),
         shsilu: this.bind('siluMulMoe', [a.shgu, a.shact, u.shsilu]),
         shd: q8(n('ffn_down_shexp.weight'), a.shact, a.sh, u.shd),
         shgate: this.bind('matmulF32', [a.xn, raw(n('ffn_gate_inp_shexp.weight')), a.sg, u.shgate]),
-        gu: this.bind('expertQ8', [a.xn, this.pool.guQ, this.pool.guS, a.gu, u.gu, a.slots]),
+        gu: this.bind(QK.ex, [a.xn, this.pool.guQ, this.pool.guS, a.gu, u.gu, a.slots]),
         silu: this.bind('siluMulMoe', [a.gu, a.act, u.silu]),
-        dn: this.bind('expertQ8', [a.act, this.pool.dQ, this.pool.dS, a.dn, u.dn, a.slots]),
+        dn: this.bind(QK.ex, [a.act, this.pool.dQ, this.pool.dS, a.dn, u.dn, a.slots]),
         acc: this.bind('moeAccumShared', [a.dn, a.sel, a.sh, a.sg, a.x, u.acc]),
         route: this.bind('route', [a.sel, a.rmap, a.slots, a.stop, a.used, U([l, c.experts, K, 0])]),
       });
       this.layers.push(g);
     }
     this.g.rmsOut = this.bind('rmsnorm', [a.x, raw('output_norm.weight'), a.xn, u.rmsH]);
-    this.g.lm = this.bind('matmulQ8', [a.xn, W['output.weight'].q, W['output.weight'].s, a.logits, u.lm]);
+    this.g.lm = QK.lm === 'matmulQ6K'
+      ? this.bind('matmulQ6K', [this.q6.ql, this.q6.qh, this.q6.sc, this.q6.dd, a.xn, a.logits, u.lm])
+      : this.bind(QK.lm, [a.xn, W['output.weight'].q, W['output.weight'].s, a.logits, u.lm]);
     this.g.am = this.bind('argmax', [a.logits, a.am, u.am]);
     // A chunk pins min(experts, T·K) experts per layer at once; keep that under half the pool.
     if (Math.min(c.experts, this.chunkTokens * K) > this.poolSlots / 2) this.chunkTokens = Math.max(2, Math.floor(this.poolSlots / 2 / K));
@@ -873,8 +991,9 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
       shgu: U([SF, H]), shd: U([H, SF]), sh2: U([SF]), shgate: U([1, H]),
     };
     const raw = (name) => W[name].raw;
-    const q8 = (name, x, y, uni) => this.bind('matmulQ8T', [x, W[name].q, W[name].s, y, uni, qb]);
-    this.gB = { embed: this.bind('embedQ8B', [W['token_embd.weight'].q, W['token_embd.weight'].s, b.ids, b.x, u.nH, qb]) };
+    const QK = this.qk;
+    const q8 = (name, x, y, uni) => this.bind(QK.mmT, [x, W[name].q, W[name].s, y, uni, qb]);
+    this.gB = { embed: this.bind(QK.embB, [W['token_embd.weight'].q, W['token_embd.weight'].s, b.ids, b.x, u.nH, qb]) };
     for (let l = 0; l < c.layers; l++) {
       const n = (t) => `blk.${l}.${t}`, g = { rmsA: this.bind('rmsnormB', [b.x, raw(n('attn_norm.weight')), b.xn, u.rmsH]) };
       if (this.recurrent[l]) {
@@ -892,9 +1011,9 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
           ropeQ: this.bind('qkNormRopePB', [b.qg, raw(n('attn_q_norm.weight')), b.rope, b.q, b.gate, u.ropeQ]),
           ropeK: this.bind('qkNormRopePB', [b.k, raw(n('attn_k_norm.weight')), b.rope, b.kr, b.dummy, u.ropeK]),
           kv: this.bind('kvStoreB', [b.kr, b.v, this.kc[l], this.vc[l], u.kvn, qb]),
-          score: this.bind('attnScoreB', [b.q, this.kc[l], b.sc, u.att, qb]),
+          score: this.bind('attnScorePosB', [b.q, this.kc[l], b.sc, u.att, qb, this.kpos]),
           soft: this.bind('softmaxB', [b.sc, qb]),
-          attOut: this.bind('attnOutB', [b.sc, this.vc[l], b.att, u.attOut, qb]),
+          attOut: this.bind('attnOutPosB', [b.sc, this.vc[l], b.att, u.attOut, qb]),
           gate: this.bind('sigmoidMulB', [b.att, b.gate, u.gate, qb]),
           o: q8(n('attn_output.weight'), b.att, b.o, u.o),
         });
@@ -908,9 +1027,9 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
         shact: this.bind('siluMul2B', [b.shg, b.shu, b.shact, u.sh2, qb]),
         shd: q8(n('ffn_down_shexp.weight'), b.shact, b.sh, u.shd),
         shgate: this.bind('matmulF32T', [b.xn, raw(n('ffn_gate_inp_shexp.weight')), b.sg, u.shgate]),
-        gu: this.bind('expertQ8B', [b.xn, this.pool.guQ, this.pool.guS, b.gu, u.gu, b.slots]),
+        gu: this.bind(QK.exB, [b.xn, this.pool.guQ, this.pool.guS, b.gu, u.gu, b.slots]),
         silu: this.bind('siluMulMoe', [b.gu, b.act, u.silu]),
-        dn: this.bind('expertQ8B', [b.act, this.pool.dQ, this.pool.dS, b.dn, u.dn, b.slots]),
+        dn: this.bind(QK.exB, [b.act, this.pool.dQ, this.pool.dS, b.dn, u.dn, b.slots]),
         acc: this.bind('moeAccumSharedB', [b.dn, b.sel, b.sh, b.sg, b.x, u.acc, qb]),
       });
       this.layers[l].B = g;
@@ -924,44 +1043,46 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
     const tt = Math.ceil(T / 16), mm = (n) => Math.ceil(n / 16);
     d('rmsnormB', g.rmsA, T);
     if (this.recurrent[l]) {
-      d('matmulQ8T', g.qkv, mm(convDim), tt); d('matmulQ8T', g.z, mm(s.dInner), tt);
-      d('matmulQ8T', g.beta, mm(s.vHeads), tt); d('matmulQ8T', g.alpha, mm(s.vHeads), tt);
+      d(this.qk.mmT, g.qkv, mm(convDim), tt); d(this.qk.mmT, g.z, mm(s.dInner), tt);
+      d(this.qk.mmT, g.beta, mm(s.vHeads), tt); d(this.qk.mmT, g.alpha, mm(s.vHeads), tt);
       d('gdnConvB', g.conv, Math.ceil(convDim / 256));
       d('gdnStepB', g.step, s.vHeads);
       d('gdnNormGateB', g.norm, s.vHeads, T);
-      d('matmulQ8T', g.out, mm(H), tt);
+      d(this.qk.mmT, g.out, mm(H), tt);
     } else {
-      d('matmulQ8T', g.q, mm(2 * QN), tt); d('matmulQ8T', g.k, mm(kvn), tt); d('matmulQ8T', g.v, mm(kvn), tt);
+      d(this.qk.mmT, g.q, mm(2 * QN), tt); d(this.qk.mmT, g.k, mm(kvn), tt); d(this.qk.mmT, g.v, mm(kvn), tt);
       d('qkNormRopePB', g.ropeQ, c.heads, T); d('qkNormRopePB', g.ropeK, c.kvHeads, T);
       d('kvStoreB', g.kv, Math.ceil(kvn / 256), T);
-      d('attnScoreB', g.score, Math.ceil(c.heads * T * S / 256));
+      d('attnScorePosB', g.score, Math.ceil(c.heads * T * S / 256));
       d('softmaxB', g.soft, c.heads * T);
-      d('attnOutB', g.attOut, Math.ceil(QN / 256), T);
+      d('attnOutPosB', g.attOut, Math.ceil(QN / 256), T);
       d('sigmoidMulB', g.gate, Math.ceil(QN / 256), T);
-      d('matmulQ8T', g.o, mm(H), tt);
+      d(this.qk.mmT, g.o, mm(H), tt);
     }
     d('addInPlaceB', g.addO, Math.ceil(H / 256), T);
     d('rmsnormB', g.rmsF, T);
     d('matmulF32T', g.router, c.experts, T);
     d('topkB', g.topk, T);
-    d('matmulQ8T', g.shg, mm(c.shexpFf), tt); d('matmulQ8T', g.shu, mm(c.shexpFf), tt);
+    d(this.qk.mmT, g.shg, mm(c.shexpFf), tt); d(this.qk.mmT, g.shu, mm(c.shexpFf), tt);
     d('siluMul2B', g.shact, Math.ceil(c.shexpFf / 256), T);
-    d('matmulQ8T', g.shd, mm(H), tt);
+    d(this.qk.mmT, g.shd, mm(H), tt);
     d('matmulF32T', g.shgate, 1, T);
   }
 
   encodeExpertsB(pass, l, T) {
     const c = this.cfg, g = this.layers[l].B, d = (nm, gr, x, y, z) => this.dispatch(pass, nm, gr, x, y, z);
-    d('expertQ8B', g.gu, Math.ceil(2 * c.expertFf / 4), 1, T * c.topK);
+    d(this.qk.exB, g.gu, Math.ceil(2 * c.expertFf / 4), 1, T * c.topK);
     d('siluMulMoe', g.silu, Math.ceil(T * c.topK * c.expertFf / 256));
-    d('expertQ8B', g.dn, Math.ceil(c.hidden / 4), 1, T * c.topK);
+    d(this.qk.exB, g.dn, Math.ceil(c.hidden / 4), 1, T * c.topK);
     d('moeAccumSharedB', g.acc, Math.ceil(c.hidden / 256), T);
   }
 
   // Feeds T = ids.length tokens at this.position through every layer: one routing readback per
   // layer, the union of the chunk's experts loaded once. want: 'none' | 'argmax' | 'logits' for
   // the last token, as in step().
-  async prefillChunk(ids, want = 'none') {
+  // ext (images): { embeds: Float32Array T × hidden (input rows instead of token embeddings), pos: Int32Array T × 4
+  // [t, s0, s1, s2] (KV position and the three M-RoPE section positions), tNext: the next text position after it }.
+  async prefillChunk(ids, want = 'none', ext = null) {
     const c = this.cfg, dev = this.device, K = c.topK, H = c.hidden, T = ids.length, pos0 = this.position, S = pos0 + T;
     if (T > this.chunkTokens) throw new Error(`chunk of ${T} > ${this.chunkTokens}`);
     if (S > this.maxCtx) throw this.contextFull();
@@ -969,15 +1090,14 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
     dev.queue.writeBuffer(this.a.stop, 0, new Uint32Array(4));   // the head below uses guarded kernels
     dev.queue.writeBuffer(this.b.ids, 0, Uint32Array.from(ids));
     dev.queue.writeBuffer(this.qb, 0, new Uint32Array([T, pos0, S, 0]));
-    const nRot = c.ropeDims, half = nRot / 2, r = new Float32Array(T * nRot), stepR = Math.fround(Math.pow(c.ropeTheta, -2 / nRot));
-    for (let t = 0; t < T; t++) {
-      let th = Math.fround(pos0 + t);
-      for (let i = 0; i < half; i++) { r[t * nRot + i] = Math.cos(th); r[t * nRot + half + i] = Math.sin(th); th = Math.fround(th * stepR); }
-    }
-    dev.queue.writeBuffer(this.b.rope, 0, r);
+    const pos = ext && ext.pos ? ext.pos : this.textPositions(T);
+    dev.queue.writeBuffer(this.b.rope, 0, this.ropeRows(pos, T));
+    const kp = new Uint32Array(T); for (let t = 0; t < T; t++) kp[t] = pos[t * 4];
+    dev.queue.writeBuffer(this.kpos, pos0 * 4, kp);
+    if (ext && ext.embeds) dev.queue.writeBuffer(this.b.x, 0, ext.embeds);
     const selBytes = T * 2 * K * 4;
     let enc = dev.createCommandEncoder(), pass = enc.beginComputePass();
-    this.dispatch(pass, 'embedQ8B', this.gB.embed, Math.ceil(H / 256), T);
+    if (!(ext && ext.embeds)) this.dispatch(pass, this.qk.embB, this.gB.embed, Math.ceil(H / 256), T);
     this.encodeTrunkB(pass, 0, T, S);
     pass.end();
     enc.copyBufferToBuffer(this.b.sel, 0, this.rbSelB, 0, selBytes);
@@ -1009,7 +1129,7 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
         if (want !== 'none') {
           pass = enc.beginComputePass();
           this.dispatch(pass, 'rmsnorm', this.g.rmsOut, 1);
-          this.dispatch(pass, 'matmulQ8', this.g.lm, Math.ceil(c.vocab / 4));
+          this.dispatch(pass, this.qk.lm, this.g.lm, Math.ceil(c.vocab / 4));
           if (want === 'argmax') this.dispatch(pass, 'argmax', this.g.am, 1);
           pass.end();
           if (want === 'argmax') enc.copyBufferToBuffer(this.a.am, 0, this.rbArg, 0, 4);
@@ -1020,7 +1140,8 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
       this.xs.release(slotsU);
     }
     this.position += T;
-    this.cached.push(...ids);
+    this.cached.push(...(ext && ext.keys ? ext.keys : ids));
+    this.tNext = ext && ext.tNext != null ? ext.tNext : kp[T - 1] + 1;
     let result = null;
     if (want === 'argmax') {
       await this.rbArg.mapAsync(1, 0, 4);
@@ -1045,38 +1166,38 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
     const H = c.hidden, QN = c.heads * c.headDim, kvn = c.kvHeads * c.headDim, convDim = 2 * s.kHeads * s.dState + s.dInner;
     d('rmsnorm', g.rmsA, 1);
     if (g.recur) {
-      d('matmulQ8', g.qkv, Math.ceil(convDim / 4)); d('matmulQ8', g.z, Math.ceil(s.dInner / 4));
-      d('matmulQ8', g.beta, Math.ceil(s.vHeads / 4)); d('matmulQ8', g.alpha, Math.ceil(s.vHeads / 4));
+      d(this.qk.mm, g.qkv, Math.ceil(convDim / 4)); d(this.qk.mm, g.z, Math.ceil(s.dInner / 4));
+      d(this.qk.mm, g.beta, Math.ceil(s.vHeads / 4)); d(this.qk.mm, g.alpha, Math.ceil(s.vHeads / 4));
       d('gdnConv', g.conv, Math.ceil(convDim / 256));
       d('gdnStep', g.step, s.vHeads);
       d('gdnNormGate', g.norm, s.vHeads);
-      d('matmulQ8', g.out, Math.ceil(H / 4));
+      d(this.qk.mm, g.out, Math.ceil(H / 4));
     } else {
-      d('matmulQ8', g.q, Math.ceil(2 * QN / 4)); d('matmulQ8', g.k, Math.ceil(kvn / 4)); d('matmulQ8', g.v, Math.ceil(kvn / 4));
+      d(this.qk.mm, g.q, Math.ceil(2 * QN / 4)); d(this.qk.mm, g.k, Math.ceil(kvn / 4)); d(this.qk.mm, g.v, Math.ceil(kvn / 4));
       d('qkNormRopeP', g.ropeQ, c.heads); d('qkNormRopeP', g.ropeK, c.kvHeads);
       d('kvStore', g.kv, Math.ceil(kvn / 256));
       d('attnScore', g.score, Math.ceil(c.heads * seqLen / 256));
       d('softmax', g.soft, c.heads);
       d('attnOut', g.attOut, Math.ceil(QN / 256));
       d('sigmoidMul', g.gate, Math.ceil(QN / 256));
-      d('matmulQ8', g.o, Math.ceil(H / 4));
+      d(this.qk.mm, g.o, Math.ceil(H / 4));
     }
     d('addInPlace', g.addO, Math.ceil(H / 256));
     if (this.prefetch) for (const p of g.pf) { d('rmsnorm', p.rms, 1); d('matmulF32', p.router, c.experts); d('topk', p.topk, 1); }
     d('rmsnorm', g.rmsF, 1);
     d('matmulF32', g.router, c.experts);
     d('topk', g.topk, 1);
-    d('matmulQ8', g.shg, Math.ceil(c.shexpFf / 4)); d('matmulQ8', g.shu, Math.ceil(c.shexpFf / 4));
+    d(this.qk.mm, g.shg, Math.ceil(c.shexpFf / 4)); d(this.qk.mm, g.shu, Math.ceil(c.shexpFf / 4));
     d('siluMulMoe', g.shsilu, Math.ceil(c.shexpFf / 256));
-    d('matmulQ8', g.shd, Math.ceil(H / 4));
+    d(this.qk.mm, g.shd, Math.ceil(H / 4));
     d('matmulF32', g.shgate, 1);
   }
 
   encodeExperts(pass, l) {
     const c = this.cfg, g = this.layers[l], d = (nm, gr, x, y, z) => this.dispatch(pass, nm, gr, x, y, z);
-    d('expertQ8', g.gu, Math.ceil(2 * c.expertFf / 4), 1, c.topK);
+    d(this.qk.ex, g.gu, Math.ceil(2 * c.expertFf / 4), 1, c.topK);
     d('siluMulMoe', g.silu, Math.ceil(c.topK * c.expertFf / 256));
-    d('expertQ8', g.dn, Math.ceil(c.hidden / 4), 1, c.topK);
+    d(this.qk.ex, g.dn, Math.ceil(c.hidden / 4), 1, c.topK);
     d('moeAccumShared', g.acc, Math.ceil(c.hidden / 256));
   }
 
@@ -1113,7 +1234,7 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
       if (slots) dev.queue.writeBuffer(this.a.slots, 0, slots);
       const enc = dev.createCommandEncoder(), pass = enc.beginComputePass();
       if (resume < 0) {
-        this.dispatch(pass, 'embedQ8', this.g.embed, Math.ceil(c.hidden / 256));
+        this.dispatch(pass, this.qk.emb, this.g.embed, Math.ceil(c.hidden / 256));
         this.encodeAttention(pass, 0, seqLen);
         this.dispatch(pass, 'route', this.layers[0].route, 1);
       }
@@ -1124,7 +1245,7 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
       }
       if (last === L - 1 && want !== 'none') {
         this.dispatch(pass, 'rmsnorm', this.g.rmsOut, 1);
-        this.dispatch(pass, 'matmulQ8', this.g.lm, Math.ceil(c.vocab / 4));
+        this.dispatch(pass, this.qk.lm, this.g.lm, Math.ceil(c.vocab / 4));
         if (want === 'argmax') this.dispatch(pass, 'argmax', this.g.am, 1);
       }
       pass.end();
@@ -1187,13 +1308,40 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
 
   // RoPE angles as ggml's CPU rope cache forms them for text positions (all M-RoPE sections at
   // the token position): θ = pos, multiplied by base^(-2/nRot) once per pair, in f32.
+  // pos is the KV slot; RoPE takes the text position tNext, which runs behind the slot after an image (a tile's
+  // tokens share one position).
   writeTokenUniforms(token, pos) {
-    const c = this.cfg, nRot = c.ropeDims, half = nRot / 2;
     this.device.queue.writeBuffer(this.tok, 0, new Uint32Array([token, pos, pos + 1, 0]));
-    const r = new Float32Array(nRot), step = Math.fround(Math.pow(c.ropeTheta, -2 / nRot));
-    let th = Math.fround(pos);
-    for (let i = 0; i < half; i++) { r[i] = Math.cos(th); r[half + i] = Math.sin(th); th = Math.fround(th * step); }
-    this.device.queue.writeBuffer(this.a.rope, 0, r);
+    const t = this.tNext ?? pos;
+    this.device.queue.writeBuffer(this.a.rope, 0, this.ropeRows(Int32Array.of(t, t, t, t), 1));
+    if (this.kpos) this.device.queue.writeBuffer(this.kpos, pos * 4, Uint32Array.of(t));
+    this.tNext = t + 1;
+  }
+  // Text positions for the next T tokens: [t, t, t, t] each.
+  textPositions(T) {
+    const t0 = this.tNext ?? this.position, p = new Int32Array(T * 4);
+    for (let t = 0; t < T; t++) p.fill(t0 + t, t * 4, t * 4 + 4);
+    return p;
+  }
+  // RoPE cos/sin rows for T tokens with positions [t, s0, s1, s2] each, as ggml's rope cache forms them for
+  // interleaved M-RoPE (ggml_mrope_cache_init, is_imrope): rotary pair i takes section s1 when i % 3 == 1, s2 when
+  // i % 3 == 2, else s0 (within 3 × the section sizes); each section's angle is its position × base^(-2i/n). For
+  // text all three are t, which is plain RoPE, bit for bit what this engine computed before.
+  ropeRows(pos, T) {
+    const c = this.cfg, nRot = c.ropeDims, half = nRot / 2, sec = this.ropeSections;
+    const step = Math.fround(Math.pow(c.ropeTheta, -2 / nRot)), nSec = sec[0] + sec[1] + sec[2] + sec[3];
+    const r = new Float32Array(T * nRot);
+    for (let t = 0; t < T; t++) {
+      const th = [Math.fround(pos[t * 4 + 1]), Math.fround(pos[t * 4 + 2]), Math.fround(pos[t * 4 + 3]), 0];
+      for (let i = 0; i < half; i++) {
+        const sector = nSec ? i % nSec : 0;
+        const k = !(sec[1] || sec[2]) ? 0 : sector % 3 === 1 && sector < 3 * sec[1] ? 1 : sector % 3 === 2 && sector < 3 * sec[2] ? 2 : sector % 3 === 0 && sector < 3 * sec[0] ? 0 : 3;
+        const a = th[k];
+        r[t * nRot + i] = Math.cos(a); r[t * nRot + half + i] = Math.sin(a);
+        for (let j = 0; j < 4; j++) th[j] = Math.fround(th[j] * step);
+      }
+    }
+    return r;
   }
 
   // Qwen3.5/3.6's template opens the reasoning block in the generation prompt when thinking is on.
@@ -1203,27 +1351,291 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
     return p + '<|im_start|>assistant\n' + (enableThinking ? '<think>\n' : '<think>\n\n</think>\n\n');
   }
 
-  // The recurrent state cannot rewind to an earlier position, so any change before the cached
-  // end restarts from token 0.
+  // The recurrent state cannot rewind to an earlier position, so a change before the cached end restarts from token
+  // 0, or from the checkpoint below when the prompt still starts with it.
   reset() {
     super.reset();
+    this.tNext = 0;
     if (!this.conv) return;
     const enc = this.device.createCommandEncoder();
     for (let l = 0; l < this.cfg.layers; l++) if (this.recurrent[l]) { enc.clearBuffer(this.conv[l]); enc.clearBuffer(this.ssm[l]); }
     this.device.queue.submit([enc.finish()]);
   }
 
-  async prefill(ids, want = 'argmax') {
+  // The checkpoint: the state after the system turn (with tools on, ~1,900 tokens of tool instructions), so a new
+  // chat, an edited history or an image turn re-reads only what follows it. KV rows below its length stay as they
+  // were as long as nothing prefills over them; the DeltaNet conv and delta-rule state is copied out and back.
+  saveCheckpoint(keys) {
+    const enc = this.device.createCommandEncoder();
+    this.cpConv ||= []; this.cpSsm ||= [];
+    for (let l = 0; l < this.cfg.layers; l++) {
+      if (!this.recurrent[l]) continue;
+      this.cpConv[l] ||= this.buffer(this.conv[l].size, STORAGE | COPY_SRC | COPY_DST, 'state');
+      this.cpSsm[l] ||= this.buffer(this.ssm[l].size, STORAGE | COPY_SRC | COPY_DST, 'state');
+      enc.copyBufferToBuffer(this.conv[l], 0, this.cpConv[l], 0, this.conv[l].size);
+      enc.copyBufferToBuffer(this.ssm[l], 0, this.cpSsm[l], 0, this.ssm[l].size);
+    }
+    this.device.queue.submit([enc.finish()]);
+    this.checkpoint = { keys: keys.slice(), tNext: this.tNext };
+  }
+  restoreCheckpoint() {
+    const cp = this.checkpoint, enc = this.device.createCommandEncoder();
+    for (let l = 0; l < this.cfg.layers; l++) {
+      if (!this.recurrent[l]) continue;
+      enc.copyBufferToBuffer(this.cpConv[l], 0, this.conv[l], 0, this.conv[l].size);
+      enc.copyBufferToBuffer(this.cpSsm[l], 0, this.ssm[l], 0, this.ssm[l].size);
+    }
+    this.device.queue.submit([enc.finish()]);
+    this.position = cp.keys.length; this.cached = cp.keys.slice(); this.tNext = cp.tNext;
+  }
+
+  // Where the system turn ends in a prompt's ids (after its <|im_end|> and newline), or 0 without one.
+  systemTurnEnd(ids) {
+    const tk = this.tokenizer, start = tk.ids.get('<|im_start|>'), end = tk.ids.get('<|im_end|>');
+    if (ids[0] !== start || tk.decode([ids[1]]) !== 'system') return 0;
+    const i = ids.indexOf(end);
+    return i < 0 ? 0 : i + (tk.decode([ids[i + 1]]) === '\n' ? 2 : 1);
+  }
+
+  // Where to keep the checkpoint: after the tool list (`</tools>`) when the system turn has one, since LocalMind
+  // appends the user's own system prompt and the memory recalled for each question after the tool instructions;
+  // else after the system turn.
+  checkpointEnd(ids) {
+    const end = this.systemTurnEnd(ids), has = (n) => this.tokenizer.decode(ids.slice(0, n)).includes('</tools>');
+    if (!end || !has(end)) return end;
+    let lo = 1, hi = end;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (has(mid)) hi = mid; else lo = mid + 1; }
+    return lo;
+  }
+
+  async prefill(ids, want = 'argmax') { return this.prefillSegments([{ ids }], want, { sysEnd: this.checkpointEnd(ids) }); }
+
+  // Reads a system prompt's stable part into the checkpoint before the first question (the SSD worker calls it after
+  // load with the tool instructions), so that question starts after it. Returns the tokens read.
+  async prime(system) {
+    const release = await this.acquire();
+    try {
+      const ids = this.tokenizer.encode(this.chatPrompt([{ role: 'system', content: system }], { enableThinking: false }));
+      const end = this.checkpointEnd(ids), keys = ids.slice(0, end);
+      if (!end || (this.checkpoint && this.checkpoint.keys.length === end && keys.every((k, i) => k === this.checkpoint.keys[i]))) return 0;
+      this.reset();
+      await this.prefillSegments([{ ids: keys }], 'none', { sysEnd: end });
+      return end;
+    } catch (e) { throw this.stepError(e); } finally { release(); }
+  }
+
+  // Prefills a prompt given as segments: { ids } text, or an image { keys, n, entries, rel, embeds: async () =>
+  // Float32Array } whose keys stand for its tokens in the cache (they name the image, so a turn that repeats it
+  // matches). Starts from the furthest of: the cached tokens when the prompt extends them, the checkpoint when the
+  // prompt starts with it, or token 0; saves a new checkpoint at sysEnd when it reads the system turn.
+  async prefillSegments(segs, want = 'argmax', { sysEnd = 0 } = {}) {
+    const keys = segs.flatMap((sg) => sg.ids || sg.keys);
     let common = 0;
-    while (common < ids.length - 1 && common < this.cached.length && this.cached[common] === ids[common]) common++;
-    if (common < this.cached.length) this.reset();
-    const rest = ids.slice(this.cached.length);
-    if (!this.batchPrefill || rest.length < 2) return super.prefill(ids, want);
-    let r = null;
-    for (let i = 0; i < rest.length; i += this.chunkTokens) {
-      r = await this.prefillChunk(rest.slice(i, i + this.chunkTokens), i + this.chunkTokens >= rest.length ? want : 'none');
+    while (common < keys.length - 1 && common < this.cached.length && this.cached[common] === keys[common]) common++;
+    const cp = this.checkpoint;
+    const cpLen = cp && cp.keys.length < keys.length && cp.keys.every((k, i) => k === keys[i]) ? cp.keys.length : -1;
+    const extLen = common === this.cached.length ? common : -1;
+    if (cpLen > extLen) this.restoreCheckpoint();
+    else if (extLen < 0) this.reset();
+    if (cp && cpLen < 0 && this.cached.length < cp.keys.length) this.checkpoint = null;   // its KV rows get overwritten
+    const from = this.cached.length;
+    const cut = sysEnd > from && sysEnd <= keys.length ? sysEnd : -1;
+    let r = null, at = 0;
+    for (let si = 0; si < segs.length; si++) {
+      const sg = segs[si], len = sg.ids ? sg.ids.length : sg.n, segEnd = at + len, last = si === segs.length - 1;
+      if (segEnd <= from) { at = segEnd; continue; }
+      if (sg.ids) {
+        for (let i = Math.max(0, from - at); i < len;) {
+          let n = Math.min(this.chunkTokens, len - i);
+          if (cut > at + i && cut < at + i + n) n = cut - at - i;   // end a chunk at the checkpoint
+          const chunk = sg.ids.slice(i, i + n), w = last && i + n >= len ? want : 'none';
+          if (!this.batchPrefill || n < 2) for (let j = 0; j < n; j++) r = await this.step(chunk[j], j === n - 1 ? w : 'none');
+          else r = await this.prefillChunk(chunk, w);
+          i += n;
+          if (at + i === cut) this.saveCheckpoint(keys.slice(0, cut));
+        }
+        at = segEnd;
+        continue;
+      }
+      if (from > at) throw new Error('the cache ends inside an image');
+      // Whole tiles (with their separators) per chunk: a tile's tokens must see each other, so a tile never splits.
+      const embeds = await sg.embeds();
+      const pos0 = this.tNext, base = pos0 - 1, dim = this.cfg.hidden, { rel, nPos } = sg.rel;
+      const spans = []; let o = 0;
+      for (const e of sg.entries) { const n = e.gw * e.gh + e.seps; if (n > this.chunkTokens) throw new Error(`a tile of ${n} tokens > chunk ${this.chunkTokens}`); spans.push([o, n]); o += n; }
+      let ci = 0;
+      while (ci < spans.length) {
+        const start = spans[ci][0]; let n = 0;
+        while (ci < spans.length && n + spans[ci][1] <= this.chunkTokens) { n += spans[ci][1]; ci++; }
+        const pos = new Int32Array(n * 4);
+        for (let i = 0; i < n; i++) {
+          const [dt, dy, dx, isSep] = rel[start + i];
+          if (isSep) pos.fill(pos0 + dt, i * 4, i * 4 + 4); else pos.set([pos0 + dt, base, base + dy, base + dx], i * 4);
+        }
+        r = await this.prefillChunk(new Array(n).fill(0xffffffff), last && ci >= spans.length ? want : 'none',
+          { embeds: embeds.subarray(start * dim, (start + n) * dim), pos, tNext: pos0 + nPos, keys: sg.keys.slice(start, start + n) });
+      }
+      at = segEnd;
     }
     return r;
+  }
+}
+
+// A 64-bit FNV-1a of a typed array's bytes, as hex: names an image in the prefix cache.
+function hashBytes(a) {
+  const u = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+  let h1 = 0x811c9dc5, h2 = 0x01000193 ^ u.length;
+  for (let i = 0; i < u.length; i++) { h1 = Math.imul(h1 ^ u[i], 0x01000193); h2 = Math.imul(h2 ^ u[i], 0x5bd1e995); }
+  return (h1 >>> 0).toString(16).padStart(8, '0') + (h2 >>> 0).toString(16).padStart(8, '0');
+}
+
+// OpenBMB's MiniCPM-V 4.7 35B-A3B (2026-10): its language model is a qwen35moe with Qwen3.6's shapes, so it runs on
+// this engine; its Q4_0 GGUF (Q4_0 matrices and experts, a Q6_K output) on the Q4_0 kernels. Text only: the vision
+// encoder (mmproj, projector `minicpmv4_7`) is a separate file this engine does not read.
+export const MINICPM_V47_35B_A3B = {
+  repo: 'openbmb/MiniCPM-V-4.7-35B-A3B-gguf',
+  file: 'MiniCPM-V-4_7-35B-A3B-Q4_0.gguf',
+  revision: '3c3f7e84f14a760ff26d17ab5932d4aa996227c0',
+  sha256: 'fbc90b193ea8b7fefbb04f46af583e1dd80177be91671f624036c2ec77639488',
+  size: 19714550688,
+  // The vision encoder (projector minicpmv4_7), same repo and revision; loaded on the first image.
+  mmproj: { file: 'mmproj-model-f16.gguf', size: 1119575840, sha256: 'bff3b688e14c300eca273092c37c50a0ddfcc2054e079af1a0480edeed5d20f1' },
+};
+
+export class MiniCpmV47Ssd extends Qwen35MoeSsd {
+  static async load(modelId = null, opts = {}) {
+    return super.load(modelId, opts.source || opts.url ? opts : { ...opts, source: MINICPM_V47_35B_A3B });
+  }
+
+  // OpenBMB's tokenizer.json splits words with Qwen2's rule (\p{L}+, no \p{M}); the GGUF header says `qwen35`, whose
+  // rule keeps combining marks in the word. Follow the model's own tokenizer: Hindi and Tamil differ, 15/15 strings
+  // match HF `tokenizers` this way (2026-10-14). llama.cpp follows the header, so its ids differ on those scripts.
+  static tokenizerFrom(kv) { return super.tokenizerFrom({ ...kv, 'tokenizer.ggml.pre': 'qwen2' }); }
+
+  // MiniCPM-V's template: earlier replies carry an empty think block and lose their reasoning (the model's
+  // own </think> and LocalMind's <|think|> … <|/think|> markers); the reply after the last question keeps it.
+  // Content may be a list of parts: text, and images rendered as <|image_pad|> (joined by newlines, as the template's
+  // render_content does); imageSegments() expands each pad.
+  chatPrompt(messages, { enableThinking = true } = {}) {
+    const lastUser = messages.map((m) => m.role).lastIndexOf('user');
+    let p = '';
+    messages.forEach((m, i) => {
+      let c = (Array.isArray(m.content)
+        ? m.content.map((x) => (x && x.type === 'image' ? '<|image_pad|>' : x && x.type === 'text' ? x.text : '')).join('\n')
+        : String(m.content ?? '')).trim();
+      if (m.role === 'assistant' && i < lastUser) {
+        c = c.replace(/<\|think\|>[\s\S]*?<\|\/think\|>/g, '');
+        if (c.includes('</think>')) c = c.split('</think>').pop();
+        c = '<think>\n\n</think>\n\n' + c.trim();
+      }
+      p += `<|im_start|>${m.role}\n${c}<|im_end|>\n`;
+    });
+    return p + '<|im_start|>assistant\n' + (enableThinking ? '<think>\n' : '<think>\n\n</think>\n\n');
+  }
+
+  // ── Images (layer 1: one overview tile per image, width × height ≤ 448², sides multiples of 56) ──────────────
+  // vision: a MiniCpmVVision (minicpmv_vision.js) on this engine's device.
+  attachVision(vision) { this.vision = vision; }
+
+  // The vision encoder from the pinned repo (OPFS-cached after the first download), on this engine's device.
+  async ensureVision({ onProgress = () => {} } = {}) {
+    if (this.vision) return this.vision;
+    const src = MINICPM_V47_35B_A3B, mm = src.mmproj;
+    this.vision = await MiniCpmVVision.loadCached(this.device, {
+      url: `https://huggingface.co/${src.repo}/resolve/${src.revision}/${mm.file}`, size: mm.size, name: 'minicpm-v-4_7-mmproj',
+      source: { repo: src.repo, file: mm.file, revision: src.revision, sha256: mm.sha256, size: mm.size },
+      fetch: this.opts.fetch, onProgress,
+    });
+    return this.vision;
+  }
+
+  // Prompt segments: text ids, and per image { keys, n, entries, grid, rel, embeds } (see imagePositions and
+  // prefillSegments; embeds() runs the encoder, so an image already in the cache is not encoded again). As llama.cpp's
+  // mtmd lays a MiniCPM-V 4.7 image out (mtmd.cpp add_canvas_chunk): the text "<image_id>N</image_id><image>", then
+  // one canvas chunk: the overview tile and the slices row by row, each followed by its separator rows
+  // (v.tok_embd_sep: 0 </image>, 1 <slice>, 2 </slice>, 3 \n). An image part is { type: 'image', rgb (packed RGB
+  // bytes), width, height } (preprocessed here exactly as llama.cpp does), or { type: 'image', pixels, width, height },
+  // one ready tile.
+  async imageSegments(messages, opts) {
+    const images = [];
+    for (const m of messages) if (Array.isArray(m.content)) for (const x of m.content) if (x && x.type === 'image') images.push(x);
+    const pieces = this.chatPrompt(messages, opts).split('<|image_pad|>');
+    const dim = this.cfg.hidden, segs = [];
+    for (let k = 0; k < pieces.length; k++) {
+      const text = pieces[k] + (k < images.length ? `<image_id>${k}</image_id><image>` : '');
+      if (text) segs.push({ ids: this.tokenizer.encode(text) });
+      if (k >= images.length) continue;
+      const img = images[k];
+      const plan = img.rgb ? planImage(img.width, img.height) : null, grid = plan ? plan.grid : null;
+      const sizes = plan ? [plan.overview, ...Array.from({ length: grid ? grid[0] * grid[1] : 0 }, () => plan.cell)] : [[img.width, img.height]];
+      const entries = sizes.map(([w, h], e) => {
+        if (w % 56 || h % 56) throw new Error(`image tile ${w}×${h}: sides must be multiples of 56`);
+        const s = e - 1, last = e === sizes.length - 1;
+        const seps = e === 0 ? (grid ? [0, 1] : [0]) : last ? [2] : (s % grid[0] === grid[0] - 1 ? [2, 3, 1] : [2, 1]);
+        return { gw: w / 56, gh: h / 56, seps };
+      });
+      const n = entries.reduce((a, e) => a + e.gw * e.gh + e.seps.length, 0);
+      const id = `img:${img.width}x${img.height}:${hashBytes(img.rgb || img.pixels)}:`;
+      const embeds = async () => {
+        const tiles = img.rgb ? preprocessImage(img.rgb, img.width, img.height).tiles : [img];
+        const sep = await this.vision.separators(), out = new Float32Array(n * dim);
+        let o = 0;
+        for (let e = 0; e < tiles.length; e++) {
+          const enc = await this.vision.encode(tiles[e].pixels, tiles[e].width, tiles[e].height);
+          if (enc.dim !== dim) throw new Error(`vision output ${enc.dim} wide, text model ${dim}`);
+          const rows = await this.vision.readback(enc.buffer, enc.tokens * enc.dim);
+          enc.buffer.destroy();
+          out.set(rows, o); o += rows.length;
+          for (const r of entries[e].seps) { out.set(sep.subarray(r * dim, (r + 1) * dim), o); o += dim; }
+        }
+        return out;
+      };
+      const ents = entries.map((e) => ({ gw: e.gw, gh: e.gh, seps: e.seps.length }));
+      segs.push({ keys: Array.from({ length: n }, (_, i) => id + i), n, entries: ents, grid, embeds, rel: MiniCpmV47Ssd.imagePositions(ents, grid) });
+    }
+    return segs;
+  }
+
+  // Relative positions for one image's tokens, as mtmd_canvas_decoder_pos gives them: per token [dt, dy, dx, sep]
+  // where a tile token's position is t = pos0 + dt, z = base, y = base + dy, x = base + dx (base = pos0 - 1, the
+  // <image> token), and a separator's (sep = 1) is pos0 + dt in every slot. Tiles share one t each; separators take
+  // one each. The canvas is grid × the last tile's token grid; the overview is stretched over it (round(linspace),
+  // ties to even) and slice s fills cell (s % cols, s / cols).
+  static imagePositions(entries, grid) {
+    const last = entries[entries.length - 1], nx = last.gw, ny = last.gh;
+    const cw = grid ? grid[0] * nx : nx, ch = grid ? grid[1] * ny : ny;
+    const scale = (c, g, cv) => (g <= 1 || cv <= 1 ? 0 : Math.min(roundEven((c * (cv - 1)) / (g - 1)), cv - 1));
+    const rel = [];
+    let t = 0;
+    entries.forEach((e, k) => {
+      for (let i = 0; i < e.gw * e.gh; i++) {
+        const row = Math.floor(i / e.gw), col = i % e.gw;
+        const [h, w] = k === 0 ? [scale(row, e.gh, ch), scale(col, e.gw, cw)] : [Math.floor((k - 1) / grid[0]) * ny + row, ((k - 1) % grid[0]) * nx + col];
+        rel.push([t, h, w, 0]);
+      }
+      for (let j = 0; j < e.seps; j++) rel.push([t + 1 + j, 0, 0, 1]);
+      t += 1 + e.seps;
+    });
+    return { rel, nPos: t };
+  }
+
+  async *generateTurn(messages, opts = {}) {
+    const hasImage = messages.some((m) => Array.isArray(m.content) && m.content.some((x) => x && x.type === 'image'));
+    if (!hasImage) { yield* super.generateTurn(messages, opts); return; }
+    if (!this.vision) throw new Error('this message has an image, and no vision encoder is attached');
+    const { maxNewTokens = 512, signal, enableThinking = true } = opts;
+    const stops = new Set(this.stopTokenIds);
+    const segs = await this.imageSegments(messages, { enableThinking });
+    let next = await this.prefillSegments(segs, 'argmax', { sysEnd: segs[0].ids ? this.checkpointEnd(segs[0].ids) : 0 });
+    const outIds = [];
+    for (let i = 0; i < maxNewTokens; i++) {
+      if (signal && signal.aborted) break;
+      if (stops.has(next)) break;
+      outIds.push(next);
+      yield { text: this.tokenizer.decode(outIds), token: next, tokens: outIds.length };
+      if (this.position >= this.maxCtx) break;
+      next = await this.step(next, 'argmax');
+    }
   }
 }
 

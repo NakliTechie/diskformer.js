@@ -15,7 +15,8 @@ const write = process.argv.includes('--write');
 const lmSrc = join(lm, 'src');
 
 const STORE = [['opfs-reader.js', 'opfs-reader.js'], ['expert-stream.js', 'moe-expert-stream.js'], ['rows.js', 'rows.js'], ['gguf.js', 'gguf.js'], ['ingest.js', 'ingest.js'], ['errors.js', 'errors.js']];
-const ENGINES = ['qwen3_moe_ssd.js', 'qwen35_moe_ssd.js', 'gemma4_moe_ssd.js'];
+// minicpmv_vision.js: the MiniCPM-V image encoder qwen35_moe_ssd.js imports for MiniCPM-V 4.7 (LocalMind 3b5331f)
+const ENGINES = ['qwen3_moe_ssd.js', 'qwen35_moe_ssd.js', 'gemma4_moe_ssd.js', 'minicpmv_vision.js'];
 // LocalMind's sibling paths → diskformer's src/ paths, in import and export-from statements.
 const REWRITES = { './opfs-reader.js': '../src/opfs-reader.js', './moe-expert-stream.js': '../src/expert-stream.js', './gguf.js': '../src/gguf.js', './ingest.js': '../src/ingest.js', './errors.js': '../src/errors.js' };
 // Module specifiers only: `from '…'`, `import '…'`, `import('…')`, either quote. A relative specifier that is
