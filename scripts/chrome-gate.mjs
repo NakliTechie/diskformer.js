@@ -3,7 +3,7 @@
 // (examples/chat/refs/*.json) with paged experts, and reports how many match. Each run uses a new Chrome profile that
 // is deleted when Chrome exits (Chrome holds the OPFS file until then, so removing it from a page fails), unless
 // --profile names one to keep.
-//   node scripts/chrome-gate.mjs <file.gguf> <refs.json> --models <dir> [--slots 8] [--profile dir] [--keep] [--out x.json]
+//   node scripts/chrome-gate.mjs <file.gguf> <refs.json> --models <dir> [--slots 8 | --budget GB] [--profile dir] [--keep] [--out x.json]
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { createReadStream, realpathSync } from 'node:fs';
@@ -72,7 +72,9 @@ const send = (method, params = {}) => new Promise((r) => { const n = ++id; pend.
 const ev = async (expression) => { const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); return r.result && r.result.result && r.result.result.value; };
 
 const size = (await stat(join(models, file))).size;
-const q = new URLSearchParams({ model: file, refs: '/' + refs.replace(/^\//, ''), slots: arg('slots', '8'), url: `/models/${file}`, size: String(size) });
+// --budget <GB> plans slots (and the batch size) from a GPU budget, as the demo page does; else --slots, default 8
+const sizing = arg('budget') ? { budget: arg('budget') } : { slots: arg('slots', '8') };
+const q = new URLSearchParams({ model: file, refs: '/' + refs.replace(/^\//, ''), ...sizing, url: `/models/${file}`, size: String(size) });
 await send('Page.navigate', { url: `http://127.0.0.1:${port}/ggml/gate.html?${q}` });
 let gate = null, last = '', lastAt = Date.now();
 const stall = Number(arg('stall', 10)) * 60e3;   // no new line on the page for this long: the gate is stuck
@@ -83,7 +85,7 @@ for (const t0 = Date.now(); Date.now() - t0 < Number(arg('minutes', 120)) * 60e3
   if (line && line !== last) { console.error(`${new Date().toTimeString().slice(0, 8)} ${line}`); last = line; lastAt = Date.now(); }
   if (!gate && Date.now() - lastAt > stall) { gate = { error: `stalled: no progress for ${stall / 60e3} min after "${last}"` }; console.error(gate.error); }
 }
-const result = gate ? { file, refs, slots: Number(arg('slots', '8')), same: gate.same, total: gate.total, error: gate.error,
+const result = gate ? { file, refs, ...sizing, same: gate.same, total: gate.total, error: gate.error,
   differ: (gate.results || []).filter((r) => !r.ok).map((r) => r.name), texts: (gate.results || []).map((r) => ({ name: r.name, ok: r.ok, text: r.text })) } : { file, refs, error: 'timed out' };
 if (arg('out')) await writeFile(arg('out'), JSON.stringify(result, null, 1));
 console.log(JSON.stringify({ ...result, texts: undefined }));

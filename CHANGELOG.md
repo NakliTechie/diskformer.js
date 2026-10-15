@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+- `diskformer/llama`: the GPU budget plan picks the physical batch size (llama.cpp's `n_ubatch`) as the largest of
+  512, 256, 128 and 64 that leaves room for one token's experts. The compute buffers scale with it (Gemma 4 26B-A4B:
+  542 MiB at 512, 271 at 256, 135 at 128), so a tight budget now runs instead of failing: Gemma 4 runs at 3 GB
+  (8 slots, batch 256; 8/9 replies identical to llama.cpp in Chrome and natively), where it needed about 3.4 GB. A
+  smaller batch slows long prompts (649 tokens: 95 tok/s at 512, 46 at 128), so ample budgets keep 512.
+  `DF_UBATCH` fixes the size. `scripts/chrome-gate.mjs --budget GB`.
+
 ## 0.5.3 (2026-10-15)
 - Engines synced from LocalMind: the Q4_0 and Q6_K kernels are shared from `engines/qwen3_moe_ssd.js`;
   `engines/qwen35_moe_ssd.js` reads Q4_0 files and carries MiniCPM-V 4.7's image encoder

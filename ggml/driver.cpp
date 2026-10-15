@@ -181,6 +181,18 @@ static ggml_backend_buffer_type_t df_paged_buft(int n_slots) {
 static const char * const DF_PAGED = "exps\\.weight";  // tensors paged: the routed experts
 static std::string        g_plan;
 
+// Tokens per physical batch (llama.cpp's n_ubatch). The compute buffers scale with it (Gemma 4 26B-A4B: 542 MiB at
+// 512, 135 at 128), and a smaller one halves prompt speed at 128, because each pass pages in its own experts. df_plan
+// picks the largest that leaves room for one token's experts and df_load uses the same; DF_UBATCH fixes it instead.
+static uint32_t g_ubatch = 0;
+static void df_set_ubatch(llama_context_params & cp) {
+    if (const char * u = getenv("DF_UBATCH")) {
+        cp.n_ubatch = (uint32_t) atoi(u);
+    } else if (g_ubatch) {
+        cp.n_ubatch = g_ubatch;
+    }
+}
+
 // How many expert slots per tensor fit a GPU budget, as JSON: {"budget","dense","kv","compute","reserve","per_slot","n_expert",
 // "n_used","slots"} in bytes, or {"error": ...}. The GPU bill without experts (weights, KV cache, compute buffers) is
 // measured the way llama.cpp's --fit does it: a load that only simulates allocations, experts kept off the GPU. A
@@ -224,38 +236,52 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char * df_plan(const char * path, double b
     if (model == nullptr) {
         return (g_plan = "{\"error\":\"cannot load the model\"}").c_str();
     }
-    llama_context_params cp = llama_context_default_params();
-    cp.n_ctx                = n_ctx;
-    cp.n_batch              = 512;
-    llama_context * ctx     = llama_init_from_model(model, cp);
-    if (ctx == nullptr) {
-        llama_model_free(model);
-        return (g_plan = "{\"error\":\"cannot create a context\"}").c_str();
-    }
-    size_t dense = 0, kv = 0, compute = 0;
-    for (const auto & [buft, mb] : llama_get_memory_breakdown(ctx)) {
-        ggml_backend_dev_t dev = ggml_backend_buft_get_device(buft);
-        const auto         type = dev ? ggml_backend_dev_type(dev) : GGML_BACKEND_DEVICE_TYPE_CPU;
-        if (type == GGML_BACKEND_DEVICE_TYPE_GPU || type == GGML_BACKEND_DEVICE_TYPE_IGPU) {
-            dense += mb.model;
-            kv += mb.context;
-            compute += mb.compute;
-        }
-    }
-    llama_free(ctx);
-    llama_model_free(model);
-
     const size_t per_slot = paged_bytes / n_expert;
     // reserve: the real load's compute buffer measured 5.5 MiB above this simulation (Gemma 4 26B-A4B, experts paged
     // vs on the CPU), plus the backend's slot maps and parameter buffers
     const size_t reserve  = 32u << 20;
-    const double room     = budget - (double) (dense + kv + compute + reserve);
-    const long   slots    = room > 0 ? std::min<long>((long) (room / per_slot), n_expert) : 0;
-    char         buf[512];
+    // physical batch: 512 when the budget allows, else halved until one token's experts fit (DF_UBATCH: that one only)
+    const char *          fixed = getenv("DF_UBATCH");
+    std::vector<uint32_t> sizes = fixed ? std::vector<uint32_t>{ (uint32_t) atoi(fixed) } : std::vector<uint32_t>{ 512, 256, 128, 64 };
+    size_t   dense = 0, kv = 0, compute = 0;
+    long     slots = 0;
+    uint32_t ubatch = 0;
+    for (const uint32_t u : sizes) {
+        llama_context_params cp = llama_context_default_params();
+        cp.n_ctx                = n_ctx;
+        cp.n_batch              = 512;
+        cp.n_ubatch             = u;
+        llama_context * ctx     = llama_init_from_model(model, cp);
+        if (ctx == nullptr) {
+            llama_model_free(model);
+            return (g_plan = "{\"error\":\"cannot create a context\"}").c_str();
+        }
+        dense = kv = compute = 0;
+        for (const auto & [buft, mb] : llama_get_memory_breakdown(ctx)) {
+            ggml_backend_dev_t dev = ggml_backend_buft_get_device(buft);
+            const auto         type = dev ? ggml_backend_dev_type(dev) : GGML_BACKEND_DEVICE_TYPE_CPU;
+            if (type == GGML_BACKEND_DEVICE_TYPE_GPU || type == GGML_BACKEND_DEVICE_TYPE_IGPU) {
+                dense += mb.model;
+                kv += mb.context;
+                compute += mb.compute;
+            }
+        }
+        llama_free(ctx);
+        ubatch            = u;
+        const double room = budget - (double) (dense + kv + compute + reserve);
+        slots             = room > 0 ? std::min<long>((long) (room / per_slot), n_expert) : 0;
+        if (slots >= (long) n_used) {
+            break;
+        }
+    }
+    llama_model_free(model);
+    g_ubatch = ubatch;
+
+    char buf[512];
     snprintf(buf, sizeof(buf),
              "{\"budget\":%.0f,\"dense\":%zu,\"kv\":%zu,\"compute\":%zu,\"reserve\":%zu,\"per_slot\":%zu,\"n_expert\":%u,"
-             "\"n_used\":%u,\"slots\":%ld%s}",
-             budget, dense, kv, compute, reserve, per_slot, n_expert, n_used, slots,
+             "\"n_used\":%u,\"ubatch\":%u,\"slots\":%ld%s}",
+             budget, dense, kv, compute, reserve, per_slot, n_expert, n_used, ubatch, slots,
              slots < (long) n_used ? ",\"error\":\"the budget does not hold the dense part and one token's experts\"" : "");
     return (g_plan = buf).c_str();
 }
@@ -291,6 +317,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int df_load(const char * path, int n_slots, int 
     llama_context_params cp = llama_context_default_params();
     cp.n_ctx                = n_ctx;
     cp.n_batch              = 512;
+    df_set_ubatch(cp);
     cp.no_perf              = false;
     // DF_FLASH_ATTN=0 / 1 forces flash attention off / on (default: llama.cpp decides), to compare with a reference
     // recorded either way
