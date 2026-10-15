@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.3 (2026-10-15)
+- Engines synced from LocalMind: the Q4_0 and Q6_K kernels are shared from `engines/qwen3_moe_ssd.js`;
+  `engines/qwen35_moe_ssd.js` reads Q4_0 files and carries MiniCPM-V 4.7's image encoder
+  (`engines/minicpmv_vision.js`, new). Gemma 4 26B-A4B chat gate: 9/9 replies identical to llama.cpp at a 2.5 GB
+  budget (2.02 GB on the GPU).
+- docs/coverage.md: Velvet-Eclipse 4x12B (Mixtral-style `llama` MoE) runs with paged experts, too slowly to be
+  practical (0.74 tok/s, 1.4 GB read per token).
+
 ## 0.5.2 (2026-10-14)
 - `diskformer/llama` works when imported from a CDN: a `Llama` on another origin starts its worker from a same-origin
   stub that imports `worker.mjs`, because browsers refuse a cross-origin worker URL. Checked from a localhost page
