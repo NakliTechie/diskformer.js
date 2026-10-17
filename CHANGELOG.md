@@ -7,6 +7,7 @@
   (8 slots, batch 256; 8/9 replies identical to llama.cpp in Chrome and natively), where it needed about 3.4 GB. A
   smaller batch slows long prompts (649 tokens: 95 tok/s at 512, 46 at 128), so ample budgets keep 512.
   `DF_UBATCH` fixes the size. `scripts/chrome-gate.mjs --budget GB`.
+- Engines: `gemma4_moe_ssd.js` synced from LocalMind (embedding-kernel hooks); chat gate 9/9.
 
 ## 0.5.3 (2026-10-15)
 - Engines synced from LocalMind: the Q4_0 and Q6_K kernels are shared from `engines/qwen3_moe_ssd.js`;
