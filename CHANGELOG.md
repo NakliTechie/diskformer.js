@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+- Native driver reads a split GGUF (`name-0000k-of-0000n.gguf`, as published) part by part, so it is never merged.
+  Ling 3.0 Flash (124B-A5B, 2 parts, 77 GB) on the llama.cpp path natively: replies identical at 8 and 32 slots on 3
+  prompts, 32 tokens. The browser build refuses a split GGUF with a message for now. Rebuilt browser build rechecked:
+  Granite 4.0 H Tiny 9/9 in Chrome.
+
 ## 0.6.2 (2026-10-23)
 - `engines/ling_moe_ssd.js`: the Ling 3.0 Flash engine (inclusionAI, 124B-A5B, `bailingmoe3`: KDA linear attention +
   MLA, 512 experts), handed over by LocalMind (d210986); the first engine diskformer adopts rather than mirrors.

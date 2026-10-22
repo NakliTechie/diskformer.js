@@ -57,10 +57,15 @@ static void df_emit(const char * piece) {
 #    define EMSCRIPTEN_KEEPALIVE
 #endif
 
-// The page source: expert bytes come from the GGUF itself (tensor name -> absolute offset of its data).
+// The page source: expert bytes come from the GGUF itself (tensor name -> which file, absolute offset of its data).
+// A split GGUF (name-0000k-of-0000n.gguf, as published) is read part by part, never merged.
+struct df_tensor_at {
+    int    file;
+    size_t off;
+};
 struct df_gguf_source {
-    std::string                             path;
-    std::unordered_map<std::string, size_t> offsets;
+    std::vector<std::string>                      paths;
+    std::unordered_map<std::string, df_tensor_at> offsets;
 };
 static df_gguf_source g_src;
 // Expert bytes read from the GGUF and read calls, since load: the page's "read from disk" figures.
@@ -85,24 +90,32 @@ static void df_src_read_batch(void * ud, size_t n, const char * const * names, c
 #ifdef __EMSCRIPTEN__
     std::vector<double> o(n), sz(n);
     for (size_t i = 0; i < n; i++) {
-        o[i]  = (double) (src->offsets.at(names[i]) + offs[i]);
+        o[i]  = (double) (src->offsets.at(names[i]).off + offs[i]);
         sz[i] = (double) sizes[i];
     }
     df_read_file_batch((int) n, o.data(), sz.data(), (char * const *) dsts);
 #else
-    // a few threads, each with its own FILE
+    // a few threads, each with its own FILE per part
     const size_t             n_threads = std::min<size_t>(n, 8);
     std::vector<std::thread> pool;
     for (size_t t = 0; t < n_threads; t++) {
         pool.emplace_back([&, t]() {
-            FILE * f = fopen(src->path.c_str(), "rb");
+            std::vector<FILE *> f(src->paths.size(), nullptr);
             for (size_t i = t; i < n; i += n_threads) {
-                fseeko(f, (off_t) (src->offsets.at(names[i]) + offs[i]), SEEK_SET);
-                if (fread(dsts[i], 1, sizes[i], f) != sizes[i]) {
+                const df_tensor_at & at = src->offsets.at(names[i]);
+                if (f[at.file] == nullptr) {
+                    f[at.file] = fopen(src->paths[at.file].c_str(), "rb");
+                }
+                fseeko(f[at.file], (off_t) (at.off + offs[i]), SEEK_SET);
+                if (fread(dsts[i], 1, sizes[i], f[at.file]) != sizes[i]) {
                     abort();
                 }
             }
-            fclose(f);
+            for (FILE * fp : f) {
+                if (fp != nullptr) {
+                    fclose(fp);
+                }
+            }
         });
     }
     for (auto & th : pool) {
@@ -123,7 +136,7 @@ static void df_src_upload_batch(void * ud, void * device, size_t n, const char *
     g_read_calls += (double) n;
     for (size_t i = 0; i < n; i++) {
         g_read_bytes += (double) sizes[i];
-        o[i]  = (double) (src->offsets.at(names[i]) + offs[i]);
+        o[i]  = (double) (src->offsets.at(names[i]).off + offs[i]);
         sz[i] = (double) sizes[i];
         d[i]  = (double) dst_offs[i];
     }
@@ -136,18 +149,52 @@ static void df_src_read(void * ud, const char * name, size_t off, void * dst, si
     df_src_read_batch(ud, 1, &name, &off, &d, &size);
 }
 
-static bool df_src_open(const char * path) {
+static bool df_src_open_part(const std::string & path, int file) {
     gguf_init_params params = { true, nullptr };
-    gguf_context *   gguf   = gguf_init_from_file(path, params);
+    gguf_context *   gguf   = gguf_init_from_file(path.c_str(), params);
     if (gguf == nullptr) {
         return false;
     }
     const size_t base = gguf_get_data_offset(gguf);
     for (int64_t i = 0; i < gguf_get_n_tensors(gguf); i++) {
-        g_src.offsets[gguf_get_tensor_name(gguf, i)] = base + gguf_get_tensor_offset(gguf, i);
+        g_src.offsets[gguf_get_tensor_name(gguf, i)] = { file, base + gguf_get_tensor_offset(gguf, i) };
     }
     gguf_free(gguf);
-    g_src.path = path;
+    g_src.paths.push_back(path);
+    return true;
+}
+
+// path: the GGUF, or the first part of a split one (its siblings are found by llama.cpp's split naming)
+static bool df_src_open(const char * path) {
+    g_src = {};
+    gguf_init_params params = { true, nullptr };
+    gguf_context *   gguf   = gguf_init_from_file(path, params);
+    if (gguf == nullptr) {
+        return false;
+    }
+    const int64_t key   = gguf_find_key(gguf, "split.count");
+    const int     count = key >= 0 ? (int) gguf_get_val_u16(gguf, key) : 1;
+    gguf_free(gguf);
+    if (count <= 1) {
+        return df_src_open_part(path, 0);
+    }
+#ifdef __EMSCRIPTEN__
+    fprintf(stderr, "df: split GGUFs (%d parts) are not read in the browser yet\n", count);
+    return false;
+#endif
+    char prefix[4096];
+    if (llama_split_prefix(prefix, sizeof(prefix), path, 0, count) == 0) {
+        fprintf(stderr, "df: %s is not named as part 1 of %d\n", path, count);
+        return false;
+    }
+    for (int k = 0; k < count; k++) {
+        char part[4096];
+        llama_split_path(part, sizeof(part), prefix, k, count);
+        if (!df_src_open_part(part, k)) {
+            fprintf(stderr, "df: cannot read part %s\n", part);
+            return false;
+        }
+    }
     return true;
 }
 
