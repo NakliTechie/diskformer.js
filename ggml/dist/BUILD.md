@@ -4,7 +4,7 @@
 because diskformer.naklitechie.com and the HF Space serve them and their CI has no Emscripten; the npm package ships them
 as `diskformer/llama`.
 
-Built from the fork `NakliTechie/llama.cpp` branch `webgpu-diskformer` at `f2a7a531d` (upstream master of 2026-10-14 merged in), Emscripten 6.0.1 (Homebrew),
+Built from the fork `NakliTechie/llama.cpp` branch `webgpu-diskformer` at `ecaa47b29` (upstream master of 2026-10-22 merged in, which adds Flint), Emscripten 6.0.13 (Homebrew),
 emdawnwebgpu from the fork's `emdawnwebgpu_pkg`, all C++ with `-fwasm-exceptions`. Rebuild (copies here as a
 post-build step):
 
@@ -12,7 +12,7 @@ post-build step):
 
 sha256 (check a copy with `shasum -a 256`):
 
-    e9449400e06e66e29d729069a0fc0cba7f72cad352b29835b7239785c21098b4  df-chat.wasm
-    2267afb7b9ee76149748956cc2418202526e4f2144784268cf7bdabf5127e062  df-chat.mjs
+    cc2d43b6fbf5f9fe0848ebc42deb79365b5765f99a973eeadeb11fbbc6b0b4d8  df-chat.wasm
+    43dea00df2a5345efc65c6521b825032670447bac854d2d346aa82132b3b37f9  df-chat.mjs
 
 Update the fork commit and the checksums whenever the build changes.

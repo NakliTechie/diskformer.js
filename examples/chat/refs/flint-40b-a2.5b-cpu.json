@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp fork build 741 (a37cc4610), CPU, -ngl 0: llama-server /completion on the /apply-template prompt, temperature 0, max_tokens 64, on flint-int4-q4_1.gguf (sha256 43c07baccdba42eb7528a9630ee15699b1942c297291dc1b39a061f508ee1a4b). Recorded 2026-10-22 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<|user|>Explain the difference between TCP and UDP to a new programmer.<|assistant|>",
+   "content": "<think>1.  **Deconstruct the User's Request**:\n    *   Target audience: A *new programmer* (likely just starting out, maybe knows basic programming concepts like variables, loops, functions, but not networking deeply).\n    *   Topic: Difference between TCP and UDP.\n    *   Goal: Explain clearly,",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<|user|>Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<|assistant|>",
+   "content": "<think>We need to extract name, city, and age from the sentence: \"Priya, 34, moved from Pune to Lisbon last year.\"\n\nThe sentence structure: Name",
+   "finish": "stop",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<|user|>Translate into Hindi: \"The library opens at nine and closes at six.\"<|assistant|>",
+   "content": "<think>The user wants me to translate an English sentence into Hindi. The sentence is \"The library opens at nine and closes at six.\"\n\nThis is a straightforward translation task with clear content. The source text is simple and factual, stating library hours. I need to provide an accurate Hindi translation.\n\nFor the translation, I should",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<|user|>A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<|assistant|>",
+   "content": "<think>We need answer. Need solve. User asks: A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show steps briefly.\n\nNeed be careful time calculation. From 14:10 to 17:45. Could compute: 14:10 to 15",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<|user|>Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<|assistant|>",
+   "content": "<think>We need to write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).\n\nInterpretation: We need to sum the amount for each customer from orders, then order by total descending, and pick top 5. The result should",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<|user|>List five major rivers of Africa, one per line, with the country where each reaches the sea.<|assistant|>",
+   "content": "<think>1.  The user asks for five major rivers of Africa, one per line, with the country where each reaches the sea.\n2.",
+   "finish": "stop",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<|user|>What do these emoji usually mean in a text message: 🙏 🔥 💀 ?<|assistant|>",
+   "content": "<think>1.  **Analyze the User's Request**:\n    *   The user is asking for the meaning of three specific emojis in the context of a text message: 🙏 (folded hands), 🔥 (fire), and 💀 (skull).\n    *   The request is straightforward and requires a clear, concise,",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<|user|>Write a haiku about autumn leaves in a city.<|assistant|>",
+   "content": "<think>The user wants a haiku about autumn leaves in a city.\n\nA haiku has a 5",
+   "finish": "stop",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<|system|>Answer like a cheerful pirate, in two sentences.<|user|>What is the boiling point of water at sea level?<|assistant|>",
+   "content": "<think>We need answer. User asks: \"Answer like a cheerful pirate, in two sentences. What is the boiling point of water at sea level?\" Need comply. Cheerful pirate, two sentences. Bo",
+   "finish": "stop",
+   "tokens": 41
+  }
+ ]
+}

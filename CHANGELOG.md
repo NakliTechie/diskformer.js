@@ -7,6 +7,14 @@
   (8 slots, batch 256; 8/9 replies identical to llama.cpp in Chrome and natively), where it needed about 3.4 GB. A
   smaller batch slows long prompts (649 tokens: 95 tok/s at 512, 46 at 128), so ample budgets keep 512.
   `DF_UBATCH` fixes the size. `scripts/chrome-gate.mjs --budget GB`.
+- Flint 40B-A2.5B (RecursiveSI, architecture `flint`, Q4_1, 26.0 GB) runs on the llama.cpp path and is in the demo
+  list. Paging is exact (9/9 replies identical at 8 and 32 slots natively); in Chrome at a 4 GB budget (26 slots),
+  6/9 replies are identical to llama.cpp on the CPU, and the other 3 part at word choices inside the reasoning,
+  1.8-3.4 tok/s. 17 architectures now pass both checks.
+- Browser build (`ggml/dist`) rebuilt on the fork after merging 178 upstream commits (`ecaa47b29`, adds Flint),
+  Emscripten 6.0.13.
+- `scripts/sync-llama-fork.sh` puts Homebrew on PATH, so the weekly launchd run finds cmake (the 2026-10-18 run failed
+  without it).
 - Engines: `gemma4_moe_ssd.js` synced from LocalMind (embedding-kernel hooks); chat gate 9/9.
 
 ## 0.5.3 (2026-10-15)

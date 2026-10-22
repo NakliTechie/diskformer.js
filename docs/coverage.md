@@ -30,6 +30,7 @@ How each row is checked (references and replies in [`examples/chat/refs/`](../ex
 | bailingmoe2 | Ling mini 2.0, Q4_K_M | 9.9 GB | 9/9 (unpaged vs 8) | 6/9 | Ring mini 2.0 |
 | granitehybrid | Granite 4.0 H Tiny, Q4_K_M | 4.2 GB | 9/9 (unpaged vs 8) | 9/9 | |
 | bailingmoe3 | Ling 3.0 tiny, Q4_K_M | 4.9 GB | 9/9 (unpaged vs 8) | 8/9 vs CPU | Edge0 8B-A1B |
+| flint | Flint 40B-A2.5B, Q4_1 | 26.0 GB | 9/9 (8 vs 32 slots) | 6/9 vs CPU | |
 | olmoe | OLMoE 1B-7B 0125 Instruct, Q4_K_M | 4.2 GB | 9/9 (unpaged vs 8) | 8/9 | |
 
 **Runs, too slow to be practical**: Velvet-Eclipse 4x12B v0.2 (Mixtral-style `llama` MoE, Q3_K_M, 18.7 GB). With

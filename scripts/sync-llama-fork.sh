@@ -6,6 +6,8 @@
 #   bash scripts/sync-llama-fork.sh            (FORK=<checkout> to use another clone)
 # The browser build in ggml/dist is not rebuilt here: after a merge, rebuild it and rerun the gates by hand.
 set -u
+# launchd starts with a bare PATH; cmake and ninja come from Homebrew
+export PATH=/opt/homebrew/bin:$PATH
 FORK=${FORK:-$HOME/Code/llama.cpp-webgpu-disk}
 BR=webgpu-diskformer
 LOG=$HOME/Library/Logs/diskformer-fork-sync.log
