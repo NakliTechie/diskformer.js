@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.2 (2026-10-23)
+- `engines/ling_moe_ssd.js`: the Ling 3.0 Flash engine (inclusionAI, 124B-A5B, `bailingmoe3`: KDA linear attention +
+  MLA, 512 experts), handed over by LocalMind (d210986); the first engine diskformer adopts rather than mirrors.
+  `splitFetch` ingests the two-part GGUF as one file. `engines/iq_quants.js` gains Q6_K and Q5_0. LocalMind's gate:
+  6-layer cut 8/8 vs llama.cpp Metal; full model 5/8 vs llama.cpp CPU over 32 tokens, layer 0 within 5 decimals of a
+  float64 reference (CPU is 1-3% off); decode 5.53 tok/s, GPU 2.51 GB dense + 4.29 GB pool (M4 Pro). Here: imports in
+  Node, LocalMind's no-GPU test (`test-ling.mjs`) passes on this copy; the GPU gate was not rerun here.
+
 ## 0.6.1 (2026-10-22)
 - `Llama.chat(messages, { thinking: false })` renders the chat template with reasoning off (llama.cpp's
   `enable_thinking`), for models that reason first: Qwen3.6 35B-A3B natively answers directly instead of opening with a

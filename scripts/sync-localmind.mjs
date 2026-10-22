@@ -22,7 +22,7 @@ const STORE = [['opfs-reader.js', 'opfs-reader.js'], ['expert-stream.js', 'moe-e
 // streaming, the Bonsai 2 drafters, the FlashMap drafter, and the shared kernels they import.
 const ENGINES = ['qwen3_moe_ssd.js', 'qwen35_moe_ssd.js', 'gemma4_moe_ssd.js', 'minicpmv_vision.js', 'lfm2_moe_ssd.js',
   'hy_v3_moe_ssd.js', 'flint_moe_ssd.js', 'iq_quants.js', 'flashmap_drafter.js', 'qwen35_dense.js', 'ple-opfs.js',
-  'ternary_bonsai_2_dflash.js', 'ternary_bonsai_2_mtp.js'];
+  'ternary_bonsai_2_dflash.js', 'ternary_bonsai_2_mtp.js', 'ling_moe_ssd.js'];
 // Not copied: lfm2_5.js, gemma-4-e2b.js and ternary_bonsai_2_27b.js are vendored from webml-community Spaces that
 // publish no license, so diskformer (MIT, on npm) cannot redistribute them until their authors grant one.
 // LocalMind's sibling paths → diskformer's src/ paths, in import and export-from statements.
