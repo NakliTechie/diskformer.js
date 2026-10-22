@@ -1,11 +1,11 @@
-// Keeps the files diskformer shares with LocalMind in step. Each file has one source:
-//   src/ (the store and residency layer)  diskformer → LocalMind, byte-identical
-//   engines/ (the reference engines)       LocalMind → diskformer, import paths rewritten to ../src/
-// LocalMind keeps these modules in its src/ (it rolls them into its one index.html with scripts/roll-in.mjs).
-//   node scripts/sync-localmind.mjs [--write] [--localmind <dir>] [--ref <git ref>]
-// --ref reads LocalMind's engines from that commit instead of its working tree (LocalMind may have work in flight).
+// Keeps LocalMind's copies of diskformer's files in step. diskformer is the source of every file (Chirag 2026-10-22:
+// diskformer holds every custom engine; LocalMind loads models through anyformer):
+//   src/ (the store and residency layer)  diskformer → LocalMind src/, byte-identical
+//   engines/ (the engines)                diskformer → LocalMind src/, import paths rewritten from ../src/ to ./
+// LocalMind keeps these modules in its src/ (it rolls them into its one index.html with scripts/roll-in.mjs) until it
+// loads every model through anyformer.
+//   node scripts/sync-localmind.mjs [--write] [--localmind <dir>]
 // Without --write it only checks, and exits 1 when a copy differs from what its source would produce.
-import { execFileSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -14,38 +14,35 @@ const here = new URL('..', import.meta.url).pathname;
 const i = process.argv.indexOf('--localmind');
 const lm = i > 0 ? process.argv[i + 1] : process.env.LOCALMIND || join(homedir(), 'Code/naklios-universe/LocalMind');
 const write = process.argv.includes('--write');
-const r = process.argv.indexOf('--ref'), ref = r > 0 ? process.argv[r + 1] : null;
 const lmSrc = join(lm, 'src');
 
 const STORE = [['opfs-reader.js', 'opfs-reader.js'], ['expert-stream.js', 'moe-expert-stream.js'], ['rows.js', 'rows.js'], ['gguf.js', 'gguf.js'], ['ingest.js', 'ingest.js'], ['errors.js', 'errors.js']];
-// Every engine LocalMind has (Chirag 2026-10-22: diskformer holds every custom engine): MoE paging, dense layer
-// streaming, the Bonsai 2 drafters, the FlashMap drafter, and the shared kernels they import.
+// MoE paging, dense layer streaming, the Bonsai 2 drafters, the FlashMap drafter, and the shared kernels they import.
 const ENGINES = ['qwen3_moe_ssd.js', 'qwen35_moe_ssd.js', 'gemma4_moe_ssd.js', 'minicpmv_vision.js', 'lfm2_moe_ssd.js',
   'hy_v3_moe_ssd.js', 'flint_moe_ssd.js', 'iq_quants.js', 'flashmap_drafter.js', 'qwen35_dense.js', 'ple-opfs.js',
   'ternary_bonsai_2_dflash.js', 'ternary_bonsai_2_mtp.js', 'ling_moe_ssd.js'];
-// Not copied: lfm2_5.js, gemma-4-e2b.js and ternary_bonsai_2_27b.js are vendored from webml-community Spaces that
-// publish no license, so diskformer (MIT, on npm) cannot redistribute them until their authors grant one.
-// LocalMind's sibling paths → diskformer's src/ paths, in import and export-from statements.
-const REWRITES = { './opfs-reader.js': '../src/opfs-reader.js', './moe-expert-stream.js': '../src/expert-stream.js', './gguf.js': '../src/gguf.js', './ingest.js': '../src/ingest.js', './errors.js': '../src/errors.js', './rows.js': '../src/rows.js' };
+// Not here: lfm2_5.js, gemma-4-e2b.js and ternary_bonsai_2_27b.js are vendored from webml-community Spaces that publish
+// no license, so diskformer (MIT, on npm) cannot redistribute them; they stay LocalMind's own.
+// diskformer's src/ paths → LocalMind's sibling paths, in import and export-from statements.
+const STORE_PATHS = Object.fromEntries(STORE.map(([ours, theirs]) => [`../src/${ours}`, `./${theirs}`]));
 // Module specifiers only: `from '…'`, `import '…'`, `import('…')`, either quote. A relative specifier that is
-// neither rewritten nor another engine would not resolve in engines/, so it stops the sync.
-const SPEC = /(\bfrom\s*|\bimport\s*\(?\s*)(['"])(\.\/[^'"]+)\2/g;
-function rewrite(text, file) {
+// neither a store file nor another engine would not resolve in LocalMind's src/, so it stops the sync.
+const SPEC = /(\bfrom\s*|\bimport\s*\(?\s*)(['"])(\.\.?\/[^'"]+)\2/g;
+function toLocalMind(text, file) {
   return text.replace(SPEC, (all, lead, q, spec) => {
-    if (REWRITES[spec]) return `${lead}${q}${REWRITES[spec]}${q}`;
-    if (ENGINES.includes(spec.slice(2))) return all;
-    throw new Error(`${file}: imports ${spec}, which has no copy in diskformer; add it to the sync or remove the import`);
+    if (STORE_PATHS[spec]) return `${lead}${q}${STORE_PATHS[spec]}${q}`;
+    if (spec.startsWith('./') && ENGINES.includes(spec.slice(2))) return all;
+    throw new Error(`${file}: imports ${spec}, which LocalMind has no copy of; add it to the sync or remove the import`);
   });
 }
 
 const pairs = [
   ...STORE.map(([ours, theirs]) => ({ src: join(here, 'src', ours), dst: join(lmSrc, theirs), map: (t) => t })),
-  ...ENGINES.map((f) => ({ src: join(lmSrc, f), dst: join(here, 'engines', f), map: (t) => rewrite(t, f), git: true })),
+  ...ENGINES.map((f) => ({ src: join(here, 'engines', f), dst: join(lmSrc, f), map: (t) => toLocalMind(t, f) })),
 ];
 let stale = 0;
-const source = (src, git) => git && ref ? execFileSync('git', ['-C', lm, 'show', `${ref}:src/${src.split('/').pop()}`], { encoding: 'utf8', maxBuffer: 1 << 28 }) : readFile(src, 'utf8');
-for (const { src, dst, map, git } of pairs) {
-  const want = map(await source(src, git));
+for (const { src, dst, map } of pairs) {
+  const want = map(await readFile(src, 'utf8'));
   const have = await readFile(dst, 'utf8').catch(() => null);
   if (have === want) continue;
   stale++;

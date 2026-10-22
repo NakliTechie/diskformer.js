@@ -26,7 +26,8 @@
  * part 2's (splitFetch answers range requests across the boundary); tensors of part 2 get offsets in that space.
  */
 
-import { Qwen3MoeSsd, BpeTokenizer, GGML, TOK, STORAGE, COPY_SRC, COPY_DST, MAP_READ, parseGguf } from './qwen3_moe_ssd.js';
+import { Qwen3MoeSsd, BpeTokenizer, GGML, TOK, STORAGE, COPY_SRC, COPY_DST, MAP_READ, parseGguf, STORE_FORMAT, STORE_ROOT } from './qwen3_moe_ssd.js';
+import { readStore } from '../src/ingest.js';
 import { QTYPES, QTYPE_BY_ID, rowBytes, mvKernel, embedKernel, deqFn, gpuBlock, gridData } from './iq_quants.js';
 
 // inclusionAI's own Q4_K_M GGUF (rev 29edce5, 2026-08-31); sha256 = the LFS object ids of the two parts.
@@ -610,9 +611,10 @@ export class LingMoeSsd extends Qwen3MoeSsd {
     const Sub = class extends self {
       static get ingestPlan() { return plan; }
       static async open(id, o) {
-        // Part 2's tensors are needed only to ingest. Offline, a complete store still loads: the read fails, and the
-        // plan (never called for a complete store) throws only if an ingest is needed.
-        if (!extra) {
+        // Part 2's tensors are needed only to ingest, so a complete store loads without reading either part's header
+        // (20 MB from Hugging Face otherwise). Offline, a failed read throws only if an ingest is needed.
+        const complete = !o.reingest && (await readStore(o.key, { root: o.root || STORE_ROOT, format: STORE_FORMAT })).state === 'complete';
+        if (!extra && !complete) {
           try {
             const h = await baseFetch(urls[0], { headers: { Range: 'bytes=0-16777215' }, cache: 'no-store' });
             const g1 = parseGguf(new Uint8Array(await h.arrayBuffer()));

@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.6.3 (2026-10-23)
+- `LingMoeSsd.load` reads the two parts' headers (20 MB from Hugging Face) only when an ingest follows; a complete
+  store loads without them (found by LocalMind's live check through anyformer). Imports and the no-GPU test pass; the
+  browser load of a complete store was not rerun here. `qwen3_moe_ssd.js` exports `STORE_FORMAT` and `STORE_ROOT`.
+- `scripts/sync-localmind.mjs` runs diskformer → LocalMind for every file now, engines included (imports rewritten
+  from `../src/` to `./`); `--ref` is gone, since LocalMind no longer writes engines.
 - Native driver reads a split GGUF (`name-0000k-of-0000n.gguf`, as published) part by part, so it is never merged.
   Ling 3.0 Flash (124B-A5B, 2 parts, 77 GB) on the llama.cpp path natively: replies identical at 8 and 32 slots on 3
   prompts, 32 tokens. The browser build refuses a split GGUF with a message for now. Rebuilt browser build rechecked:
