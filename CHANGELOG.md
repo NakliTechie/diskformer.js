@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2026-10-22)
+- `engines/` is the one home of LocalMind's hand-written engines (Chirag 2026-10-22: diskformer holds every custom
+  engine; anyformer routes; LocalMind loads through anyformer). New: `lfm2_moe_ssd.js`, `hy_v3_moe_ssd.js`,
+  `flint_moe_ssd.js`, `iq_quants.js`, `qwen35_dense.js`, `ple-opfs.js`, `flashmap_drafter.js`,
+  `ternary_bonsai_2_dflash.js`, `ternary_bonsai_2_mtp.js`, copied from LocalMind main b5c289d with imports rewritten;
+  each was gated in LocalMind and imports cleanly here (Node). Not copied: `lfm2_5.js`, `gemma-4-e2b.js` and
+  `ternary_bonsai_2_27b.js`, vendored from webml-community Spaces that publish no license.
+- `scripts/sync-localmind.mjs --ref <commit>` reads LocalMind's engines from a commit instead of its working tree.
 - `scripts/chrome-gate.mjs --env K=V,…` passes driver settings to the gate page.
 
 ## 0.5.4 (2026-10-22)

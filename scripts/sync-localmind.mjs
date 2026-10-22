@@ -2,8 +2,10 @@
 //   src/ (the store and residency layer)  diskformer → LocalMind, byte-identical
 //   engines/ (the reference engines)       LocalMind → diskformer, import paths rewritten to ../src/
 // LocalMind keeps these modules in its src/ (it rolls them into its one index.html with scripts/roll-in.mjs).
-//   node scripts/sync-localmind.mjs [--write] [--localmind <dir>]
+//   node scripts/sync-localmind.mjs [--write] [--localmind <dir>] [--ref <git ref>]
+// --ref reads LocalMind's engines from that commit instead of its working tree (LocalMind may have work in flight).
 // Without --write it only checks, and exits 1 when a copy differs from what its source would produce.
+import { execFileSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -12,13 +14,19 @@ const here = new URL('..', import.meta.url).pathname;
 const i = process.argv.indexOf('--localmind');
 const lm = i > 0 ? process.argv[i + 1] : process.env.LOCALMIND || join(homedir(), 'Code/naklios-universe/LocalMind');
 const write = process.argv.includes('--write');
+const r = process.argv.indexOf('--ref'), ref = r > 0 ? process.argv[r + 1] : null;
 const lmSrc = join(lm, 'src');
 
 const STORE = [['opfs-reader.js', 'opfs-reader.js'], ['expert-stream.js', 'moe-expert-stream.js'], ['rows.js', 'rows.js'], ['gguf.js', 'gguf.js'], ['ingest.js', 'ingest.js'], ['errors.js', 'errors.js']];
-// minicpmv_vision.js: the MiniCPM-V image encoder qwen35_moe_ssd.js imports for MiniCPM-V 4.7 (LocalMind 3b5331f)
-const ENGINES = ['qwen3_moe_ssd.js', 'qwen35_moe_ssd.js', 'gemma4_moe_ssd.js', 'minicpmv_vision.js'];
+// Every engine LocalMind has (Chirag 2026-10-22: diskformer holds every custom engine): MoE paging, dense layer
+// streaming, the Bonsai 2 drafters, the FlashMap drafter, and the shared kernels they import.
+const ENGINES = ['qwen3_moe_ssd.js', 'qwen35_moe_ssd.js', 'gemma4_moe_ssd.js', 'minicpmv_vision.js', 'lfm2_moe_ssd.js',
+  'hy_v3_moe_ssd.js', 'flint_moe_ssd.js', 'iq_quants.js', 'flashmap_drafter.js', 'qwen35_dense.js', 'ple-opfs.js',
+  'ternary_bonsai_2_dflash.js', 'ternary_bonsai_2_mtp.js'];
+// Not copied: lfm2_5.js, gemma-4-e2b.js and ternary_bonsai_2_27b.js are vendored from webml-community Spaces that
+// publish no license, so diskformer (MIT, on npm) cannot redistribute them until their authors grant one.
 // LocalMind's sibling paths → diskformer's src/ paths, in import and export-from statements.
-const REWRITES = { './opfs-reader.js': '../src/opfs-reader.js', './moe-expert-stream.js': '../src/expert-stream.js', './gguf.js': '../src/gguf.js', './ingest.js': '../src/ingest.js', './errors.js': '../src/errors.js' };
+const REWRITES = { './opfs-reader.js': '../src/opfs-reader.js', './moe-expert-stream.js': '../src/expert-stream.js', './gguf.js': '../src/gguf.js', './ingest.js': '../src/ingest.js', './errors.js': '../src/errors.js', './rows.js': '../src/rows.js' };
 // Module specifiers only: `from '…'`, `import '…'`, `import('…')`, either quote. A relative specifier that is
 // neither rewritten nor another engine would not resolve in engines/, so it stops the sync.
 const SPEC = /(\bfrom\s*|\bimport\s*\(?\s*)(['"])(\.\/[^'"]+)\2/g;
@@ -32,11 +40,12 @@ function rewrite(text, file) {
 
 const pairs = [
   ...STORE.map(([ours, theirs]) => ({ src: join(here, 'src', ours), dst: join(lmSrc, theirs), map: (t) => t })),
-  ...ENGINES.map((f) => ({ src: join(lmSrc, f), dst: join(here, 'engines', f), map: (t) => rewrite(t, f) })),
+  ...ENGINES.map((f) => ({ src: join(lmSrc, f), dst: join(here, 'engines', f), map: (t) => rewrite(t, f), git: true })),
 ];
 let stale = 0;
-for (const { src, dst, map } of pairs) {
-  const want = map(await readFile(src, 'utf8'));
+const source = (src, git) => git && ref ? execFileSync('git', ['-C', lm, 'show', `${ref}:src/${src.split('/').pop()}`], { encoding: 'utf8', maxBuffer: 1 << 28 }) : readFile(src, 'utf8');
+for (const { src, dst, map, git } of pairs) {
+  const want = map(await source(src, git));
   const have = await readFile(dst, 'utf8').catch(() => null);
   if (have === want) continue;
   stale++;
