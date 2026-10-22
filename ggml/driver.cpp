@@ -301,13 +301,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE int df_load(const char * path, int n_slots, int 
         fprintf(stderr, "df_load: no WebGPU_Paged buffer type (is this the webgpu-diskformer build?)\n");
         return 1;
     }
-    // DF_OUTPUT_CPU=1 keeps the token table on the CPU, so a model whose output layer reuses it (Gemma 4: 577 MiB)
-    // computes its logits there: less GPU memory, more CPU time per token
-    static llama_model_tensor_buft_override overrides[] = { { DF_PAGED, nullptr }, { nullptr, nullptr }, { nullptr, nullptr } };
+    static llama_model_tensor_buft_override overrides[] = { { DF_PAGED, nullptr }, { nullptr, nullptr } };
     overrides[0].buft = paged;
-    if (const char * oc = getenv("DF_OUTPUT_CPU"); oc && atoi(oc)) {
-        overrides[1] = { "token_embd\\.weight", ggml_backend_cpu_buffer_type() };
-    }
 
     llama_model_params mp     = llama_model_default_params();
     mp.n_gpu_layers           = 999;

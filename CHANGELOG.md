@@ -1,10 +1,6 @@
 # Changelog
 
 ## Unreleased
-- `DF_OUTPUT_CPU=1` (driver setting, `env` in `Llama.load`) keeps the token table on the CPU, so a model whose output
-  layer reuses it computes its logits there. Gemma 4 26B-A4B: the fixed GPU bill drops from 2,106 to 1,358 MiB (token
-  table 577.5 MiB, logits buffer ~171 MiB), but decode in Chrome falls from 9.3 to 5.4 tok/s at 8 slots, because the
-  browser build's CPU work runs on one thread; replies unchanged (8/9 both ways). Off by default.
 - `scripts/chrome-gate.mjs --env K=V,…` passes driver settings to the gate page.
 
 ## 0.5.4 (2026-10-22)
