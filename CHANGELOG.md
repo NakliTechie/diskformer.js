@@ -4,7 +4,8 @@
 - `Llama.chat(messages, { thinking: false })` renders the chat template with reasoning off (llama.cpp's
   `enable_thinking`), for models that reason first: Qwen3.6 35B-A3B natively answers directly instead of opening with a
   thinking process. Default unchanged (the template's own choice). Asked for by anyformer, whose other engines pass
-  `enableThinking: false`. Native driver: `df-chat model slots prompt n --no-think`.
+  `enableThinking: false`. Native driver: `df-chat model slots prompt n --no-think`. In Chrome (through anyformer's
+  diskformer-llama): Gemma 4 26B's explain-tcp chat with `thinking: false` is identical to `gemma.json`'s reply.
 
 ## 0.6.0 (2026-10-22)
 - `engines/` is the one home of LocalMind's hand-written engines (Chirag 2026-10-22: diskformer holds every custom
