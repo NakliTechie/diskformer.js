@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.4 (2026-10-22)
 - `diskformer/llama`: the GPU budget plan picks the physical batch size (llama.cpp's `n_ubatch`) as the largest of
   512, 256, 128 and 64 that leaves room for one token's experts. The compute buffers scale with it (Gemma 4 26B-A4B:
   542 MiB at 512, 271 at 256, 135 at 128), so a tight budget now runs instead of failing: Gemma 4 runs at 3 GB
