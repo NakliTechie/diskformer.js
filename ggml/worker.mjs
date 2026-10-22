@@ -3,7 +3,7 @@
 // sync access handles, straight into the wasm heap. A GGUF gets into OPFS by download (resumable, from a URL) or by
 // copying a picked file; with opfs: false a picked File is read in place instead (slower).
 //
-// Messages in: load {opfsName | file, budget | slots, ctx, env} · chat {messages, n} · complete {prompt, n} (the gate)
+// Messages in: load {opfsName | file, budget | slots, ctx, env} · chat {messages, n, thinking} · complete {prompt, n} (the gate)
 //   · abort · download {url, name, size} · list · remove {name}
 // Messages out: log · progress · plan · loaded · piece · done · downloaded · models · removed · error
 import createModule from './dist/df-chat.mjs';  // built from ggml/build-wasm, see ggml/dist/BUILD.md
@@ -188,7 +188,7 @@ onmessage = async ({ data }) => {
     } else if (data.type === 'chat') {
       // messages: the whole conversation; prompt: one user turn (the older single-turn form)
       const reply = data.messages
-        ? await mod._df_chat_messages(str(JSON.stringify(data.messages)), data.n ?? 512)
+        ? await mod._df_chat_messages(str(JSON.stringify(data.messages)), data.n ?? 512, data.thinking === false ? 0 : 1)
         : await mod._df_chat(str(data.prompt), data.n ?? 64);
       post('done', { text: text(reply), stats: JSON.parse(text(mod._df_stats())) });
     }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1 (2026-10-22)
+- `Llama.chat(messages, { thinking: false })` renders the chat template with reasoning off (llama.cpp's
+  `enable_thinking`), for models that reason first: Qwen3.6 35B-A3B natively answers directly instead of opening with a
+  thinking process. Default unchanged (the template's own choice). Asked for by anyformer, whose other engines pass
+  `enableThinking: false`. Native driver: `df-chat model slots prompt n --no-think`.
+
 ## 0.6.0 (2026-10-22)
 - `engines/` is the one home of LocalMind's hand-written engines (Chirag 2026-10-22: diskformer holds every custom
   engine; anyformer routes; LocalMind loads through anyformer). New: `lfm2_moe_ssd.js`, `hy_v3_moe_ssd.js`,

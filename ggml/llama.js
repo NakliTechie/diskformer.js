@@ -55,9 +55,10 @@ export class Llama {
     return this.request({ type: 'load', opfsName: name, budget, slots, ctx, env }, ['loaded'], (d) => { if (d.type === 'plan' && onPlan) onPlan(d.plan); });
   }
 
-  // A reply through the model's chat template; greedy. Resolves { text, stats }.
-  chat(messages, { n = 512, onPiece } = {}) {
-    return this.request({ type: 'chat', messages, n }, ['done'], (d) => { if (d.type === 'piece' && onPiece) onPiece(d.piece); });
+  // A reply through the model's chat template; greedy. Resolves { text, stats }. thinking: false renders the template
+  // with reasoning off (models that reason first then answer directly); default: the template's own choice.
+  chat(messages, { n = 512, thinking = true, onPiece } = {}) {
+    return this.request({ type: 'chat', messages, n, thinking }, ['done'], (d) => { if (d.type === 'piece' && onPiece) onPiece(d.piece); });
   }
 
   // A continuation of an already formatted prompt; greedy.

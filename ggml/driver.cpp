@@ -470,10 +470,12 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char * df_chat(const char * user, int n_pr
 }
 
 // A whole conversation through the model's chat template (jinja), greedy: messages as JSON [{"role","content"}, ...].
-// The KV cache is rebuilt from the full prompt each turn.
-extern "C" EMSCRIPTEN_KEEPALIVE const char * df_chat_messages(const char * messages_json, int n_predict) {
+// The KV cache is rebuilt from the full prompt each turn. thinking 0 renders the template with reasoning off (an empty
+// thought block for Gemma 4, no <think> for Qwen3); 1 keeps the template's default.
+extern "C" EMSCRIPTEN_KEEPALIVE const char * df_chat_messages(const char * messages_json, int n_predict, int thinking) {
     common_chat_templates_inputs inputs;
-    inputs.use_jinja = true;
+    inputs.use_jinja       = true;
+    inputs.enable_thinking = thinking != 0;
     for (const auto & m : nlohmann::ordered_json::parse(messages_json)) {
         common_chat_msg msg;
         msg.role    = m.at("role").get<std::string>();
@@ -508,7 +510,7 @@ static std::string df_expected(const std::string & prompt, const std::string & c
 // df-chat <model.gguf> <n_slots> --gate <refs.json>   replay llama.cpp's replies; exit 1 on any difference
 int main(int argc, char ** argv) {
     if (argc < 4) {
-        fprintf(stderr, "usage: %s model.gguf (n_slots | <GB>G) (prompt [n_predict] | --gate refs.json)\n", argv[0]);
+        fprintf(stderr, "usage: %s model.gguf (n_slots | <GB>G) (prompt [n_predict [--no-think]] | --gate refs.json)\n", argv[0]);
         return 1;
     }
     // n_slots, or a GPU budget in GB ("2.5G") that df_plan turns into slots
@@ -526,7 +528,13 @@ int main(int argc, char ** argv) {
         return rc;
     }
     if (std::string(argv[3]) != "--gate") {
-        df_chat(argv[3], argc > 4 ? atoi(argv[4]) : 64);
+        const int n_predict = argc > 4 ? atoi(argv[4]) : 64;
+        if (argc > 5 && std::string(argv[5]) == "--no-think") {
+            // the browser's chat path with thinking: false
+            df_chat_messages(nlohmann::json::array({ { { "role", "user" }, { "content", argv[3] } } }).dump().c_str(), n_predict, 0);
+        } else {
+            df_chat(argv[3], n_predict);
+        }
         fprintf(stderr, "\n%s\n", df_stats());
         llama_free(g_ctx);
         llama_model_free(g_model);
