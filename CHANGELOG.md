@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.4 (2026-10-23)
+- `engines/lfm2_5.js` (LFM2.5 230M/1.2B, `Lfm2Mobile`), `engines/gemma-4-e2b.js` (Gemma 4 E2B/E4B, `Gemma4Mobile`) and
+  `engines/ternary_bonsai_2_27b.js` (`TernaryBonsai2`), from LocalMind main a02f06e. Held back in 0.6.0 because their
+  webml-community Spaces showed no license; Chirag wrote them and released them under MIT (2026-10-23). All three
+  import in Node; their GPU checks are LocalMind's (`scripts/bench-engines.mjs`), not rerun here. With these,
+  diskformer holds every LocalMind engine.
+
 ## 0.6.3 (2026-10-23)
 - `LingMoeSsd.load` reads the two parts' headers (20 MB from Hugging Face) only when an ingest follows; a complete
   store loads without them (found by LocalMind's live check through anyformer). Verified in a real browser by LocalMind

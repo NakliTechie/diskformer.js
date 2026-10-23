@@ -9,7 +9,8 @@ fork of gemma4-webgpu:
   https://github.com/tylerstraub/gemma4-webgpu
 
 Changes from the original: rewritten for mixture-of-experts models whose experts stream from OPFS (Q8_0 and Q4_0
-split planes, slot-indexed expert GEMVs, GPU router top-k, chunked prefill, Q6_K head planes). `ternary_bonsai_2_dflash.js` is built from NakliTechie/dflash-mlx-bonsai2 (Apache-2.0). Everything else in
+split planes, slot-indexed expert GEMVs, GPU router top-k, chunked prefill, Q6_K head planes). `ternary_bonsai_2_dflash.js` is built from NakliTechie/dflash-mlx-bonsai2 (Apache-2.0). `lfm2_5.js`,
+`gemma-4-e2b.js` and `ternary_bonsai_2_27b.js` are built from webml-community Hugging Face Spaces by the same author, MIT. Everything else in
 this folder is MIT (../LICENSE), Copyright (c) 2026 Chirag Patnaik.
 
 The engine files are copies of LocalMind's (https://github.com/NakliTechie/LocalMind), kept in step by
