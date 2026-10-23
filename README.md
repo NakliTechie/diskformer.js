@@ -18,7 +18,7 @@ Weights stay in the user's own browser storage. The disk tier underneath (`src/`
 | How | Command |
 |---|---|
 | npm | `npm install diskformer` |
-| CDN | `import { Llama } from 'https://cdn.jsdelivr.net/npm/diskformer@0.5.4/ggml/llama.js'` |
+| CDN | `import { Llama } from 'https://cdn.jsdelivr.net/npm/diskformer@0.6.4/ggml/llama.js'` |
 | Copy | `src/`, `engines/` and `index.js`; nothing else is needed |
 
 ## Quick start
@@ -27,7 +27,7 @@ Paste into any page served over http(s), in Chrome or Edge. The first run downlo
 OPFS (resumable); later loads take seconds. Any MoE GGUF on a [checked architecture](docs/coverage.md) loads the same way.
 ```html
 <script type="module">
-import { Llama } from 'https://cdn.jsdelivr.net/npm/diskformer@0.5.4/ggml/llama.js';
+import { Llama } from 'https://cdn.jsdelivr.net/npm/diskformer@0.6.4/ggml/llama.js';
 const llama = new Llama();
 const name = 'granite-4.0-h-tiny-Q4_K_M.gguf';
 await llama.download({ name, size: 4230976352,
