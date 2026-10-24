@@ -30,6 +30,7 @@ async function inside(base, rel) {
     return (p.startsWith(base + sep) && (await stat(p)).isFile()) ? p : null;
   } catch { return null; }
 }
+let drops = Number(arg('drop', 0));
 const server = createServer(async (req, res) => {
   try {
     let path;
@@ -46,6 +47,13 @@ const server = createServer(async (req, res) => {
       }
       res.writeHead(m ? 206 : 200, { 'Content-Length': size ? end - start + 1 : 0, 'Accept-Ranges': 'bytes', ...(m ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}) });
       if (!size) { res.end(); return; }
+      // --drop <n>: the first n range responses past the header (over 2 MiB) are cut after 1 MiB, as a dropped
+      // connection, to test that an ingest retries from where it stopped
+      if (drops > 0 && start > 0 && end - start > 2 << 20) {
+        drops--;
+        createReadStream(p, { start, end: start + (1 << 20) - 1 }).on('error', () => res.destroy()).on('end', () => setTimeout(() => res.destroy(), 50)).pipe(res, { end: false });
+        return;
+      }
       createReadStream(p, { start, end }).on('error', () => res.destroy()).pipe(res);
       return;
     }

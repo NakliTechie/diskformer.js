@@ -2,7 +2,7 @@
 // a changed source (same header, new ETag), and failures while opening or writing must leave no file open, and every
 // completed store must equal a clean ingest byte for byte.   node test/ingest-resume.test.mjs
 import assert from 'node:assert/strict';
-import { ingestGguf, fileFetch } from '../src/ingest.js';
+import { ingestGguf, fileFetch, ingestProgress } from '../src/ingest.js';
 import { GGML } from '../src/gguf.js';
 
 // A GGUF v3 header with one F32 tensor, then `n` data bytes from `fill`.
@@ -152,4 +152,48 @@ const cleanB = fakeIo(); assert.ok((await run(cleanB, b)).m.complete); const ref
   assert.equal(r206.status, 206); assert.equal(r206.headers.get('content-range'), 'bytes 4-9/10'); assert.equal((await r206.arrayBuffer()).byteLength, 6);
   assert.equal((await ff('x', { headers: { Range: 'bytes=10-19' } })).status, 416);
 }
-console.log('ingest-resume: ok (abort + abort during resume + finish = clean bytes; changed source starts over; failures close every file; errors carry LOAD_ABORTED / LOAD_FAILED; a local file ingests the same bytes and resumes from itself)');
+// A connection that drops mid-range is retried from the last byte consumed: the same store as a clean ingest; the
+// header streams with progress; an HTTP 404 is not retried.
+{
+  const flaky = (file, failures) => {
+    const ok = server(file, 'e1');
+    let drops = 0;
+    const calls = [];
+    const f = async (url, init) => {
+      calls.push(init.headers.Range);
+      const r = await ok(url, init);
+      const [, a] = /bytes=(\d+)-/.exec(init.headers.Range).map(Number);
+      if (a === 0 || drops >= failures) return r;          // the header, and the requests after the planned drops
+      const inner = r.body.getReader();
+      let n = 0;
+      return { ...r, body: { getReader: () => ({ async read() {
+        if (++n === 3) { drops++; throw new TypeError('network error'); }
+        return inner.read();
+      } }) } };
+    };
+    f.calls = calls;
+    return f;
+  };
+  const fs = fakeIo(), events = [];
+  const fetch = flaky(a.file, 1);
+  const m = await ingestGguf({ url: 'm.gguf', key: 'k', plan: plan(a.head), fetch, rangeBytes: 256, io: fs.io, onProgress: (e) => events.push(e) });
+  assert.ok(m.complete);
+  assert.deepEqual(bytes(fs), refA, 'a dropped connection resumes to the same bytes');
+  const retry = events.find((e) => e.status === 'ingest-retry');
+  assert.ok(retry && retry.attempt === 1 && /network error/.test(retry.error), 'the retry is reported');
+  // ranges start every 256 bytes from the data; only a retry starts inside one, after the bytes it already delivered
+  const starts = fetch.calls.map((c) => Number(/bytes=(\d+)-/.exec(c)[1])).filter((s) => s > 0);
+  assert.ok(starts.some((s) => (s - a.head) % 256 !== 0), 'the retry starts after the bytes already consumed');
+  assert.ok(events.some((e) => e.status === 'ingest-header' && e.loaded > 0), 'the header reports progress');
+  assert.equal(ingestProgress({ status: 'ingest-header', loaded: 5, total: 9 }).status, 'weights');
+  assert.equal(ingestProgress({ status: 'ingest-retry', at: 5, total: 9 }).phase, 'retry');
+  assert.equal(fs.openCount(), 0);
+
+  const fs404 = fakeIo();
+  let n404 = 0;
+  const notFound = async (url, init) => (/bytes=0-/.test(init.headers.Range) ? server(a.file, 'e1')(url, init) : (n404++, { ok: false, status: 404, headers: { get: () => null } }));
+  const e = await ingestGguf({ url: 'm.gguf', key: 'k', plan: plan(a.head), fetch: notFound, rangeBytes: 256, io: fs404.io }).catch((x) => x);
+  assert.equal(e.code, 'LOAD_FAILED'); assert.match(e.message, /HTTP 404/); assert.equal(n404, 1, 'a 404 is not retried');
+  assert.equal(fs404.openCount(), 0);
+}
+console.log('ingest-resume: ok (abort + abort during resume + finish = clean bytes; changed source starts over; failures close every file; errors carry LOAD_ABORTED / LOAD_FAILED; a local file ingests the same bytes and resumes from itself; a dropped connection retries to the same bytes; header progress; no retry on 404)');

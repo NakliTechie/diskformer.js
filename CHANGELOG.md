@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.7 (2026-10-24)
+- Ingest on a slow or flaky link (`src/ingest.js`, every hand engine's download): the GGUF header streams with
+  `ingest-header` progress instead of arriving silently in one 16 MB piece; a range that fails mid-stream (connection
+  dropped, HTTP 5xx or 429) is retried from the last byte consumed, up to 6 times with pauses of 1 to 15 s, and each
+  retry reports `ingest-retry`; an abort, a 4xx and a write failure still end the ingest. `ingestProgress` maps both to
+  `weights` events (`phase: 'header' | 'retry'`), so a host watchdog sees the download moving. Found by LocalMind's
+  production run at 0.1 MB/s (Flint: 3 minutes without a progress event; LFM2.5 24B: "network error" after 0.68 GB).
+  Tests: a dropped connection resumes to the same bytes as a clean ingest; a 404 is not retried.
+
 ## 0.6.6 (2026-10-24)
 - The chat demo (`ggml/chat.html`) lists Ling 3.0 Flash 124B (2 parts, 77 GB, 6 GB budget) and downloads a model
   published in parts part by part, each under its own name; stop and resume work across parts, and Remove deletes every

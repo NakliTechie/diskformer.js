@@ -1,0 +1,37 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ingest retry</title>
+<pre id="out">running</pre>
+<script type="module">
+// A range cut mid-stream is retried from the last byte consumed, in a real browser (the runner's --drop cuts the first
+// n range responses after 1 MiB). Copies the first 64 MiB of a GGUF's data into OPFS in 16 MiB ranges, then compares
+// every byte with the file.   node examples/run-demo.mjs test/browser/ingest-retry.html --models <dir> --file <any GGUF> --drop 2
+import { ingestGguf, removeStore } from '../../src/ingest.js';
+const url = new URLSearchParams(location.search).get('url'), root = 'diskformer-test', key = 'retry';
+const log = (s) => { document.getElementById('out').textContent += `\n${s}`; window.progressText = s; };
+const N = 64 << 20, U = 4 << 20;
+const plan = {
+  layout: () => ({ dense: { file: 'dense.bin', bytes: N }, experts: { file: 'experts.bin', bytes: 0 } }),
+  units: (g) => Array.from({ length: N / U }, (_, i) => ({ src: g.dataStart + i * U, len: U, file: 'dense', raw: i * U })),
+};
+try {
+  await removeStore(key, { root }).catch(() => {});
+  const retries = [];
+  const m = await ingestGguf({ url, key, root, plan, rangeBytes: 16 << 20,
+    onProgress: (e) => { if (e.status === 'ingest-retry') { retries.push(e); log(`retry ${e.attempt} at ${e.at} bytes: ${e.error}`); } } });
+  const dir = await (await (await navigator.storage.getDirectory()).getDirectoryHandle(root)).getDirectoryHandle(key);
+  const got = new Uint8Array(await (await (await dir.getFileHandle('dense.bin')).getFile()).arrayBuffer());
+  const start = m.source.dataStart;
+  const want = new Uint8Array(await (await fetch(url, { headers: { Range: `bytes=${start}-${start + N - 1}` } })).arrayBuffer());
+  let same = got.length === want.length;
+  for (let i = 0; same && i < got.length; i++) if (got[i] !== want[i]) same = false;
+  await removeStore(key, { root });
+  log(`${retries.length} retries; ${got.length} bytes stored; ${same ? 'identical to the file' : 'DIFFERENT from the file'}`);
+  window.result = { ok: same && retries.length > 0, retries: retries.length, bytes: got.length, same };
+  window.done = true;
+} catch (e) {
+  log(`error: ${e.message}`);
+  window.result = { ok: false, error: e.message };
+  window.done = true;
+}
+</script>
