@@ -145,11 +145,9 @@ const CATALOG = [
   { name: 'Ling-3.0-flash-Q4_K_M-00001-of-00002.gguf', label: 'Ling 3.0 Flash 124B', note: 'Ant Group · 5B active · reasons first · 2 parts', size: 77010144672, url: HF('inclusionAI/Ling-3.0-flash-GGUF', 'Q4_K_M/Ling-3.0-flash-Q4_K_M-00001-of-00002.gguf'), budget: 6,
     parts: [{ name: 'Ling-3.0-flash-Q4_K_M-00001-of-00002.gguf', size: 49995534208, url: HF('inclusionAI/Ling-3.0-flash-GGUF', 'Q4_K_M/Ling-3.0-flash-Q4_K_M-00001-of-00002.gguf') },
             { name: 'Ling-3.0-flash-Q4_K_M-00002-of-00002.gguf', size: 27014610464, url: HF('inclusionAI/Ling-3.0-flash-GGUF', 'Q4_K_M/Ling-3.0-flash-Q4_K_M-00002-of-00002.gguf') }] },
-  // dense, with a DFlash drafter: both files download together, and the drafter speculates (replies stay greedy-identical)
-  { name: 'Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf', label: 'Nemotron 3.5 Bolt E4B', note: 'NVIDIA · dense 4B effective · DFlash drafter · reasons first', size: 6917258304, url: HF('nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB', 'Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf'), budget: 5,
-    draft: 'Nemotron-3.5-Bolt-E4B-DFlash-BF16.gguf',
-    parts: [{ name: 'Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf', size: 6180446208, url: HF('nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB', 'Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf') },
-            { name: 'Nemotron-3.5-Bolt-E4B-DFlash-BF16.gguf', size: 736812096, url: HF('nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB-DFlash', 'Nemotron-3.5-Bolt-E4B-DFlash-BF16.gguf') }] },
+  // dense. Its DFlash drafter loads (draft: + a second part) and stays greedy-identical, but on WebGPU it is slower than
+  // plain decoding (24.7 vs 30.0 tok/s in Chrome, 2026-10-24: a 4-token verify costs about 3 decodes), so it is off
+  { name: 'Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf', label: 'Nemotron 3.5 Bolt E4B', note: 'NVIDIA · dense 4B effective · reasons first', size: 6180446208, url: HF('nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB', 'Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf'), budget: 5 },
 ];
 // A catalog model's files: its parts, or the one file
 const partsOf = (m) => m.parts || [{ name: m.name, size: m.size, url: m.url }];

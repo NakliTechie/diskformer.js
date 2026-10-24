@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.8 (2026-10-24)
+- Nemotron 3.5 Bolt E4B (dense, `gemma4`, 6.18 GB) in the chat demo: 9/9 replies identical to llama-server on WebGPU
+  in Chrome, 30 tok/s at a 5 GB budget. Three fixes made it run in a browser:
+  - Head size 512 attention (Gemma 4's global layers) stays on the GPU: the fork's WebGPU flash attention reported the
+    op unsupported when the subgroup matrix path had no room, though its pipeline falls back to the tile path
+    (fork `bb798fd31`).
+  - The worker reads the mounted GGUF at most 1 GiB at a time, because `FileReaderSync` fails on a slice over 2 GiB
+    (Bolt's per-layer embedding table is 2.8 GiB); before this, Bolt did not load in a browser at all.
+  - llama.cpp's common log prints synchronously in wasm without pthreads (fork `e13de0a3c`); its worker thread threw
+    on construction and stopped speculative decoding in the browser.
+- Speculative decoding with a drafter GGUF (DFlash, DSpark, MTP: the type comes from the GGUF):
+  `load({ draft })` in `diskformer/llama`, `df_set_draft`, and `DF_DRAFT` natively; stats add `drafted`, `accepted`,
+  `draft_ms`, `verify_ms`. Default draft length 3 (`DF_DRAFT_N_MAX`), greedy-identical on WebGPU. Bolt's DFlash
+  drafter gives 9/9 identical replies and 65% acceptance, but 24.7 tok/s against 30.0 plain, because a 4-token verify
+  on WebGPU costs about 3 decodes; the chat demo therefore loads Bolt without it.
+- `df_plan` plans a dense model (no experts) and counts a drafter's bytes.
+- `scripts/chrome-gate.mjs --draft <gguf>` and `--log <file>` (Chrome's log, with the driver's lines and C++
+  exception messages, which the worker now decodes); `scripts/record-refs.mjs --draft --spec-type --draft-max`.
+
 ## 0.6.7 (2026-10-24)
 - Ingest on a slow or flaky link (`src/ingest.js`, every hand engine's download): the GGUF header streams with
   `ingest-header` progress instead of arriving silently in one 16 MB piece; a range that fails mid-stream (connection

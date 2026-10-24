@@ -153,6 +153,11 @@ onmessage = async ({ data }) => {
         // settings for llama.cpp / ggml-webgpu, e.g. { GGML_WEBGPU_PAGED_STATS: '2' }
         preRun: [(m) => Object.assign(m.ENV, data.env || {})],
       });
+      // FileReaderSync fails on a slice over 2 GiB (Gemma 4 E4B's per-layer embedding table is 2.8 GiB): read the
+      // mounted GGUF at most 1 GiB at a time; a short read is legal and fread asks again for the rest
+      const read = mod.WORKERFS.stream_ops.read;
+      mod.WORKERFS.stream_ops.read = (stream, buffer, offset, length, position) =>
+        read(stream, buffer, offset, Math.min(length, 1 << 30), position);
       // the GGUF's parts: one, or every part of a split GGUF (name-00001-of-0000n.gguf, as published), which llama.cpp
       // finds by name beside the first and the driver reads part by part
       let fhs = [], files = null;

@@ -3,11 +3,11 @@
 // (examples/chat/refs/*.json) with paged experts, and reports how many match. Each run uses a new Chrome profile that
 // is deleted when Chrome exits (Chrome holds the OPFS file until then, so removing it from a page fails), unless
 // --profile names one to keep.
-//   node scripts/chrome-gate.mjs <file.gguf> <refs.json> --models <dir> [--slots 8 | --budget GB] [--draft <drafter.gguf>] [--env K=V,…] [--profile dir] [--keep] [--out x.json]
+//   node scripts/chrome-gate.mjs <file.gguf> <refs.json> --models <dir> [--slots 8 | --budget GB] [--draft <drafter.gguf>] [--env K=V,…] [--log chrome.log] [--profile dir] [--keep] [--out x.json]
 // --draft: a drafter GGUF in --models for speculative decoding (DFlash, DSpark, MTP); replies must stay identical.
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { createReadStream, realpathSync } from 'node:fs';
+import { createReadStream, realpathSync, openSync } from 'node:fs';
 import { readFile, stat, realpath, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, extname, normalize, sep } from 'node:path';
@@ -48,7 +48,10 @@ const port = server.address().port, cdp = 9500 + (port % 400);
 const own = !arg('profile');
 const profile = arg('profile') || await mkdtemp(join(homedir(), '.cache/diskformer-gate-'));
 const chrome = spawn(process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  ['--headless=new', '--no-first-run', `--user-data-dir=${profile}`, '--enable-unsafe-webgpu', `--remote-debugging-port=${cdp}`, 'about:blank'], { stdio: 'ignore' });
+  ['--headless=new', '--no-first-run', `--user-data-dir=${profile}`, '--enable-unsafe-webgpu', `--remote-debugging-port=${cdp}`,
+    ...(arg('log') ? ['--enable-logging=stderr', '--v=0'] : []), 'about:blank'],
+  // --log <file>: Chrome's log, with the worker's console and any wasm abort, for a gate that stalls
+  { stdio: arg('log') ? ['ignore', 'ignore', openSync(arg('log'), 'w')] : 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Chrome's helper processes write into the profile for a moment after the main process exits: retry the delete
 const dropProfile = async () => {

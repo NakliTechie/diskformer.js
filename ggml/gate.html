@@ -24,6 +24,7 @@
   window.gateLog = [];
   const next = () => new Promise((resolve, reject) => {
     worker.onmessage = ({ data }) => {
+      if (data.type === 'log') console.log(data.line);   // the driver's log, in Chrome's log with chrome-gate --log
       if (data.type === 'log' && /ggml_webgpu paged/.test(data.line)) window.gateLog.push(data.line);
       if (data.type === 'error') reject(new Error(data.message));
       else if (data.type === 'loaded' || data.type === 'done' || data.type === 'downloaded') resolve(data);
