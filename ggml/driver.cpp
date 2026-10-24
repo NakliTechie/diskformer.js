@@ -541,6 +541,7 @@ static const char * df_complete_tokens_spec(std::vector<llama_token> tokens, int
     const int64_t      t0 = ggml_time_us();
     int64_t            t_first = t0;
     int                n_decode = 0, n_drafted = 0, n_accept = 0, n_steps = 0;
+    int64_t            us_draft = 0, us_verify = 0, us_feed = 0;   // per phase, for the stats
     llama_tokens       prompt_tgt, draft;
     llama_token        id_last = 0;
     int                n_past  = 0;
@@ -574,7 +575,9 @@ static const char * df_complete_tokens_spec(std::vector<llama_token> tokens, int
             }
             const int n_draft_max = std::max(0, std::min(n_ctx - n_past - 2, n_predict - n_decode - 1));
             common_speculative_get_draft_params(g_spec, seq_id) = { true, n_draft_max, n_past, id_last, &prompt_tgt, &draft };
+            const int64_t td = ggml_time_us();
             common_speculative_draft(g_spec);
+            us_draft += ggml_time_us() - td;
             if (!draft.empty() && ckpt_tgt) {
                 ckpt.update_tgt(g_ctx, seq_id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
             }
@@ -589,10 +592,18 @@ static const char * df_complete_tokens_spec(std::vector<llama_token> tokens, int
         for (size_t i = 0; i < draft.size(); ++i) {
             batch.add(draft[i], n_past + (llama_pos) i, seq_id, true);
         }
-        if (llama_process(g_ctx, LLAMA_PROCESS_TYPE_DECODE, batch.get()) || !common_speculative_process(g_spec, batch)) {
+        const int64_t tv = ggml_time_us();
+        if (llama_process(g_ctx, LLAMA_PROCESS_TYPE_DECODE, batch.get())) {
             failed = true;
             break;
         }
+        const int64_t tf = ggml_time_us();
+        us_verify += tf - tv;
+        if (!common_speculative_process(g_spec, batch)) {
+            failed = true;
+            break;
+        }
+        us_feed += ggml_time_us() - tf;
         n_steps++;
         common_sampler_ptr smpl_save;
         if (ckpt_tgt) {
@@ -653,6 +664,8 @@ static const char * df_complete_tokens_spec(std::vector<llama_token> tokens, int
               ",\"decode_ms\":" + std::to_string((t1 - t_first) / 1000) +
               ",\"draft_steps\":" + std::to_string(n_steps) +
               ",\"drafted\":" + std::to_string(n_drafted) + ",\"accepted\":" + std::to_string(n_accept) +
+              ",\"draft_ms\":" + std::to_string(us_draft / 1000) + ",\"verify_ms\":" + std::to_string(us_verify / 1000) +
+              ",\"feed_ms\":" + std::to_string(us_feed / 1000) +
               ",\"n_ctx\":" + std::to_string(n_ctx) + ",\"n_pos\":" + std::to_string(n_past) +
               ",\"aborted\":" + (g_abort ? "true" : "false") + ",\"context_full\":" + (ctx_full ? "true" : "false") + "}";
     return g_out.c_str();
