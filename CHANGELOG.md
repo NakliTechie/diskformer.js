@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.6 (2026-10-24)
+- The chat demo (`ggml/chat.html`) lists Ling 3.0 Flash 124B (2 parts, 77 GB, 6 GB budget) and downloads a model
+  published in parts part by part, each under its own name; stop and resume work across parts, and Remove deletes every
+  part. Checked in the browser: the download starts on part 1 of 2 from Hugging Face, a stop shows 0.34 GB of 77.0 GB
+  stored with Resume, and Remove leaves no file in the page's OPFS.
+
 ## 0.6.5 (2026-10-24)
 - The browser build loads a split GGUF (`name-00001-of-0000n.gguf`, as published): the worker opens every part from
   OPFS and mounts them together, `df_read_file_batch` and `df_upload_batch_js` read experts from the part that holds

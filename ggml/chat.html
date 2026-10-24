@@ -141,7 +141,13 @@ const CATALOG = [
   { name: 'Mellum2-12B-A2.5B-Instruct-Q4_K_M.gguf', label: 'Mellum2 12B', note: 'JetBrains · 2.5B active · code', size: 8071293600, url: HF('JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q4_K_M', 'Mellum2-12B-A2.5B-Instruct-Q4_K_M.gguf') },
   { name: 'flint-int4-q4_1.gguf', label: 'Flint 40B-A2.5B', note: 'RecursiveSI · 2.5B active · reasons first', size: 25992966976, url: HF('RecursiveSI/flint-int4-gguf', 'flint-int4-q4_1.gguf'), budget: 4 },
   { name: 'Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf', label: 'Qwen3-Next 80B-A3B', note: 'Qwen · 3B active · proof of concept, slow', size: 48410988384, url: HF('Qwen/Qwen3-Next-80B-A3B-Instruct-GGUF', 'Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf'), budget: 5 },
+  // published in 2 parts; each part downloads under its own name, and the worker loads them together from the first
+  { name: 'Ling-3.0-flash-Q4_K_M-00001-of-00002.gguf', label: 'Ling 3.0 Flash 124B', note: 'Ant Group · 5B active · reasons first · 2 parts', size: 77010144672, url: HF('inclusionAI/Ling-3.0-flash-GGUF', 'Q4_K_M/Ling-3.0-flash-Q4_K_M-00001-of-00002.gguf'), budget: 6,
+    parts: [{ name: 'Ling-3.0-flash-Q4_K_M-00001-of-00002.gguf', size: 49995534208, url: HF('inclusionAI/Ling-3.0-flash-GGUF', 'Q4_K_M/Ling-3.0-flash-Q4_K_M-00001-of-00002.gguf') },
+            { name: 'Ling-3.0-flash-Q4_K_M-00002-of-00002.gguf', size: 27014610464, url: HF('inclusionAI/Ling-3.0-flash-GGUF', 'Q4_K_M/Ling-3.0-flash-Q4_K_M-00002-of-00002.gguf') }] },
 ];
+// A catalog model's files: its parts, or the one file
+const partsOf = (m) => m.parts || [{ name: m.name, size: m.size, url: m.url }];
 const $ = (id) => document.getElementById(id);
 const GB = (n) => (n / 1e9).toFixed(n >= 1e10 ? 1 : 2) + ' GB';
 const MB = (n) => (n / 1e6).toFixed(0) + ' MB';
@@ -179,9 +185,16 @@ function controls() {
 
 function renderModels() {
   const byName = Object.fromEntries(stored.map((m) => [m.name, m]));
-  const rows = [...CATALOG, ...stored.filter((m) => !CATALOG.some((c) => c.name === m.name)).map((m) => ({ name: m.name, label: m.name, note: 'your file', size: m.size }))];
+  const rows = [...CATALOG, ...stored.filter((m) => !CATALOG.some((c) => partsOf(c).some((p) => p.name === m.name))).map((m) => ({ name: m.name, label: m.name, note: 'your file', size: m.size }))];
+  // a model with parts is stored when every part is, partly stored when any part is there
+  const storedAs = (m) => {
+    const got = partsOf(m).map((p) => byName[p.name]).filter(Boolean);
+    if (!got.length) return null;
+    const size = got.reduce((a, s) => a + s.size, 0);
+    return { size, partial: got.length < partsOf(m).length || got.some((s) => s.partial) };
+  };
   $('models').replaceChildren(...rows.map((m) => {
-    const s = byName[m.name], el = document.createElement('div');
+    const s = storedAs(m), el = document.createElement('div');
     el.className = 'mrow' + (loaded && loaded.name === m.name ? ' on' : '');
     const state = !s ? 'not stored' : s.partial ? `${GB(s.size)} of ${GB(m.size)} stored` : 'stored';
     const name = document.createElement('div'); name.append(Object.assign(document.createElement('b'), { textContent: m.label }));  // a stored file's own name: text, never markup
@@ -202,18 +215,26 @@ async function refresh() { stored = (await send({ type: 'list' }, ['models'])).m
 
 async function download(m) {
   const est = navigator.storage.estimate ? await navigator.storage.estimate() : {};
-  const have = (stored.find((s) => s.name === m.name) || {}).size || 0;
+  const parts = partsOf(m), sizeOf = (p) => (stored.find((s) => s.name === p.name) || {}).size || 0;
+  const have = parts.reduce((a, p) => a + sizeOf(p), 0);
   if (est.quota && est.quota - (est.usage || 0) < m.size - have) status(`Needs ${GB(m.size - have)} more; the browser allows ${GB(est.quota - (est.usage || 0))} so far and usually raises that as the download writes, while the disk has room.`);
   await (navigator.storage.persist ? navigator.storage.persist() : null);
   busy = 'download'; current = m.name; renderModels();
   try {
-    await send({ type: 'download', url: m.url, name: m.name, size: m.size }, ['models'], (d) => {
-      if (d.type === 'progress') {
-        fill(d.copied / d.total);
-        const left = d.rate ? (d.total - d.copied) / d.rate : 0;
-        status(`Downloading ${m.label} into this browser's storage (once): ${GB(d.copied)} of ${GB(d.total)}${d.rate ? ` · ${(d.rate / 1e6).toFixed(0)} MB/s · ${Math.ceil(left / 60)} min left` : ''}`);
-      }
-    }).then((d) => { stored = d.models; });
+    // part by part; a complete part returns at once, so a stopped download resumes where it was
+    let before = 0;
+    for (const [k, p] of parts.entries()) {
+      const of = parts.length > 1 ? ` (part ${k + 1} of ${parts.length})` : '';
+      await send({ type: 'download', url: p.url, name: p.name, size: p.size }, ['models'], (d) => {
+        if (d.type === 'progress') {
+          const copied = before + d.copied;
+          fill(copied / m.size);
+          const left = d.rate ? (m.size - copied) / d.rate : 0;
+          status(`Downloading ${m.label}${of} into this browser's storage (once): ${GB(copied)} of ${GB(m.size)}${d.rate ? ` · ${(d.rate / 1e6).toFixed(0)} MB/s · ${Math.ceil(left / 60)} min left` : ''}`);
+        }
+      }).then((d) => { stored = d.models; });
+      before += p.size;
+    }
     status(`${m.label} is stored. Load it to chat.`);
   } catch (e) { status(e.message, /stopped/.test(e.message) ? false : true); await refresh(); }
   finally { busy = ''; current = null; renderModels(); }
@@ -221,7 +242,7 @@ async function download(m) {
 
 async function remove(m) {
   if (loaded && loaded.name === m.name) { await restartWorker(); }
-  stored = (await send({ type: 'remove', name: m.name }, ['removed'])).models;
+  for (const p of partsOf(m)) stored = (await send({ type: 'remove', name: p.name }, ['removed'])).models;
   status(`Removed ${m.label} from this browser's storage.`); fill(0); renderModels();
 }
 
