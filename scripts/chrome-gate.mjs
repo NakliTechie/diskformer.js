@@ -3,7 +3,8 @@
 // (examples/chat/refs/*.json) with paged experts, and reports how many match. Each run uses a new Chrome profile that
 // is deleted when Chrome exits (Chrome holds the OPFS file until then, so removing it from a page fails), unless
 // --profile names one to keep.
-//   node scripts/chrome-gate.mjs <file.gguf> <refs.json> --models <dir> [--slots 8 | --budget GB] [--env K=V,…] [--profile dir] [--keep] [--out x.json]
+//   node scripts/chrome-gate.mjs <file.gguf> <refs.json> --models <dir> [--slots 8 | --budget GB] [--draft <drafter.gguf>] [--env K=V,…] [--profile dir] [--keep] [--out x.json]
+// --draft: a drafter GGUF in --models for speculative decoding (DFlash, DSpark, MTP); replies must stay identical.
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { createReadStream, realpathSync } from 'node:fs';
@@ -78,7 +79,7 @@ const sizes = await Promise.all(parts.map(async (f) => (await stat(join(models, 
 // --budget <GB> plans slots (and the batch size) from a GPU budget, as the demo page does; else --slots, default 8
 const sizing = arg('budget') ? { budget: arg('budget') } : { slots: arg('slots', '8') };
 // --env NAME=value,NAME=value: driver settings (DF_UBATCH, DF_OUTPUT_CPU, …), as gate.html takes them
-const q = new URLSearchParams({ model: file, refs: '/' + refs.replace(/^\//, ''), ...sizing, url: parts.map((f) => `/models/${f}`).join(','), size: sizes.join(','), ...(arg('env') ? { env: arg('env') } : {}) });
+const q = new URLSearchParams({ model: file, refs: '/' + refs.replace(/^\//, ''), ...sizing, url: parts.map((f) => `/models/${f}`).join(','), size: sizes.join(','), ...(arg('env') ? { env: arg('env') } : {}), ...(arg('draft') ? { draft_url: `/models/${arg('draft')}`, draft_size: String((await stat(join(models, arg('draft')))).size) } : {}) });
 await send('Page.navigate', { url: `http://127.0.0.1:${port}/ggml/gate.html?${q}` });
 let gate = null, last = '', lastAt = Date.now();
 const stall = Number(arg('stall', 10)) * 60e3;   // no new line on the page for this long: the gate is stuck

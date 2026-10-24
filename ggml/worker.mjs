@@ -3,7 +3,7 @@
 // sync access handles, straight into the wasm heap. A GGUF gets into OPFS by download (resumable, from a URL) or by
 // copying a picked file; with opfs: false a picked File is read in place instead (slower).
 //
-// Messages in: load {opfsName | file, budget | slots, ctx, env} · chat {messages, n, thinking} · complete {prompt, n} (the gate)
+// Messages in: load {opfsName | file, budget | slots, ctx, env, draft} · chat {messages, n, thinking} · complete {prompt, n} (the gate)
 //   · abort · download {url, name, size} · list · remove {name}
 // Messages out: log · progress · plan · loaded · piece · done · downloaded · models · removed · error
 import createModule from './dist/df-chat.mjs';  // built from ggml/build-wasm, see ggml/dist/BUILD.md
@@ -187,8 +187,12 @@ onmessage = async ({ data }) => {
         mod.ggufParts.push({ file: files[0], handle: null, readers: null });
       }
       const file = files[0];
+      // draft: a drafter GGUF in OPFS (DFlash, DSpark, MTP...) for speculative decoding; read whole at load, not paged
+      const draftFile = data.draft ? await (await ggufDir(false)).getFileHandle(data.draft).then((h) => h.getFile())
+        .catch(() => { throw new Error(`${data.draft} is not in OPFS; download the drafter first`); }) : null;
       mod.FS.mkdir('/m');
-      mod.FS.mount(mod.WORKERFS, { files }, '/m');
+      mod.FS.mount(mod.WORKERFS, { files: draftFile ? [...files, draftFile] : files }, '/m');
+      if (draftFile) mod._df_set_draft(str('/m/' + draftFile.name));
       const t0 = performance.now();
       // a GPU budget (bytes) becomes slots through df_plan; else data.slots as given
       let slots = data.slots, plan = null;
@@ -199,7 +203,7 @@ onmessage = async ({ data }) => {
         slots = plan.slots;
       }
       const rc = await mod._df_load(str('/m/' + file.name), slots, data.ctx ?? 1024);
-      post('loaded', { rc, slots, plan, size: files.reduce((a, f) => a + f.size, 0), name: file.name, parts: files.length, ms: Math.round(performance.now() - t0) });
+      post('loaded', { rc, slots, plan, size: files.reduce((a, f) => a + f.size, 0), name: file.name, parts: files.length, draft: draftFile ? draftFile.name : null, ms: Math.round(performance.now() - t0) });
     } else if (data.type === 'complete') {
       const reply = await mod._df_complete(str(data.prompt), data.n ?? 64);
       post('done', { id: data.id, text: text(reply), stats: JSON.parse(text(mod._df_stats())) });

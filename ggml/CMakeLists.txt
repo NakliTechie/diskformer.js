@@ -43,7 +43,7 @@ if(EMSCRIPTEN)
         -sMEMORY64=1 -fwasm-exceptions -sEXPORT_EXCEPTION_HANDLING_HELPERS -sMODULARIZE -sEXPORT_ES6 -sENVIRONMENT=worker
         -sALLOW_MEMORY_GROWTH -sMAXIMUM_MEMORY=8GB -sSTACK_SIZE=8MB
         -lworkerfs.js --js-library ${CMAKE_CURRENT_SOURCE_DIR}/df_gpu.js
-        "-sEXPORTED_FUNCTIONS=['_df_load','_df_plan','_df_chat','_df_chat_messages','_df_complete','_df_abort','_df_stats','_malloc','_free']"
+        "-sEXPORTED_FUNCTIONS=['_df_load','_df_plan','_df_set_draft','_df_chat','_df_chat_messages','_df_complete','_df_abort','_df_stats','_malloc','_free']"
         "-sJSPI_EXPORTS=['df_plan','df_load','df_chat','df_chat_messages','df_complete']"
         "-sEXPORTED_RUNTIME_METHODS=['FS','WORKERFS','UTF8ToString','stringToNewUTF8','ENV']")
     # ggml/dist/ is committed: the site and the HF Space serve it, and their CI has no Emscripten

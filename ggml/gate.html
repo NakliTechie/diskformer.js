@@ -44,8 +44,15 @@
       say(`${urls.length > 1 ? `part ${k + 1} of ${urls.length} ` : ''}in OPFS (${d.ms ? `copied in ${(d.ms / 1000).toFixed(1)} s` : 'already there'})`);
     }
   }
+  // draft_url / draft_size: a drafter GGUF for speculative decoding, copied into OPFS under its URL's name
+  const draft = q.get('draft_url') ? q.get('draft_url').split('/').pop() : null;
+  if (draft) {
+    worker.postMessage({ type: 'download', url: q.get('draft_url'), name: draft, size: +q.get('draft_size') });
+    const d = await next();
+    say(`drafter ${draft} in OPFS (${d.ms ? `copied in ${(d.ms / 1000).toFixed(1)} s` : 'already there'})`);
+  }
   // budget=<GB> plans the slots from a GPU budget; slots=<n> sets them directly
-  worker.postMessage({ type: 'load', opfsName: q.get('model'), slots: +q.get('slots'), budget: q.get('budget') ? +q.get('budget') * 1e9 : 0, env });
+  worker.postMessage({ type: 'load', opfsName: q.get('model'), slots: +q.get('slots'), budget: q.get('budget') ? +q.get('budget') * 1e9 : 0, env, draft });
   const loaded = await next();
   say(`loaded in ${(loaded.ms / 1000).toFixed(1)} s (rc ${loaded.rc}), ${loaded.slots} slots`);
   const results = [];
@@ -59,7 +66,8 @@
     const ok = r.text === want;
     const tps = r.stats.decode_tokens / (r.stats.decode_ms / 1000);
     results.push({ name: c.name, ok, text: r.text, stats: r.stats });
-    say(`${ok ? 'OK  ' : 'DIFF'} ${c.name.padEnd(22)} ${tps.toFixed(2)} tok/s${ok ? '' : `  first difference at char ${at} of ${want.length}`}`);
+    const acc = r.stats.drafted ? `  accepted ${r.stats.accepted}/${r.stats.drafted}` : '';
+    say(`${ok ? 'OK  ' : 'DIFF'} ${c.name.padEnd(22)} ${tps.toFixed(2)} tok/s${acc}${ok ? '' : `  first difference at char ${at} of ${want.length}`}`);
   }
   const same = results.filter((r) => r.ok).length;
   say(`${same}/${results.length} identical to the reference`);

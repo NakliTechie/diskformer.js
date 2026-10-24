@@ -51,8 +51,9 @@ export class Llama {
   }
 
   // Loads a stored GGUF: budget (bytes of GPU memory, slots planned from it) or slots (experts per layer on the GPU).
-  load({ name, budget = 0, slots = 0, ctx = 1024, env = {} }, onPlan) {
-    return this.request({ type: 'load', opfsName: name, budget, slots, ctx, env }, ['loaded'], (d) => { if (d.type === 'plan' && onPlan) onPlan(d.plan); });
+  // draft: a stored drafter GGUF (DFlash, DSpark, MTP...) for speculative decoding; replies stay greedy-identical.
+  load({ name, budget = 0, slots = 0, ctx = 1024, env = {}, draft = null }, onPlan) {
+    return this.request({ type: 'load', opfsName: name, budget, slots, ctx, env, draft }, ['loaded'], (d) => { if (d.type === 'plan' && onPlan) onPlan(d.plan); });
   }
 
   // A reply through the model's chat template; greedy. Resolves { text, stats }. thinking: false renders the template

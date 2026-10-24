@@ -4,7 +4,8 @@
 // (-ot exps=WebGPU_Paged, read from the GGUF), so paged and unpaged runs of one backend can be compared
 // (scripts/compare-refs.mjs).
 //
-//   node scripts/record-refs.mjs <model.gguf> <out.json> [--port 8799] [--ctx 4096] [--server <llama-server>] [--paged <slots>] [--ngl 0 (CPU)] [--no-stream] [--raw]
+//   node scripts/record-refs.mjs <model.gguf> <out.json> [--port 8799] [--ctx 4096] [--server <llama-server>] [--paged <slots>] [--ngl 0 (CPU)] [--no-stream] [--raw] [--draft <drafter.gguf> --spec-type <t>]
+// --draft: speculative decoding with a drafter (-md, --spec-type, e.g. draft-dflash); greedy replies must not change.
 // --raw: the reply as generated, reasoning included (--reasoning-format none), as the browser driver returns it; for
 // models that reason first (gpt-oss), whose 64-token reply is otherwise empty. The reply is generated from the stored
 // prompt itself (/completion), so the gate replays exactly what was generated from: through the chat endpoint, a
@@ -22,6 +23,7 @@ if (!gguf || !out) {
 const opt = (name, dflt) => (rest.includes(name) ? rest[rest.indexOf(name) + 1] : dflt);
 const port = +opt('--port', 8799), ctx = +opt('--ctx', 4096), bin = opt('--server', 'llama-server'), paged = opt('--paged', null), ngl = opt('--ngl', '99');
 const backend = ngl === '0' ? 'CPU' : bin === 'llama-server' ? 'Metal' : paged ? `WebGPU, experts paged (${paged} slots)` : 'WebGPU';
+const drafter = opt('--draft', null) ? `, speculative with ${basename(opt('--draft', null))} (${opt('--spec-type', 'draft-dflash')})` : '';
 const base = `http://127.0.0.1:${port}`;
 const conversations = JSON.parse(readFileSync(new URL('../examples/chat/refs/gemma.json', import.meta.url))).conversations;
 
@@ -115,7 +117,8 @@ async function chat(messages, maxTokens) {
 // CPU: weights stay memory-mapped and are not repacked, so a model larger than RAM loads (Ling 3.0 Flash, 77 GB on a
 // 24 GB Mac: repacking copies every weight into RAM, and the server swapped for minutes and never became healthy).
 const cpu = ngl === '0' ? ['-lm', 'mmap', '--no-repack'] : [];
-const server = spawn(bin, ['-m', gguf, '-ngl', ngl, ...cpu, '-c', String(ctx), '--port', String(port), '--jinja', '--timeout', '3600', ...(paged ? ['-ot', 'exps=WebGPU_Paged'] : []), ...(rest.includes('--raw') ? ['--reasoning-format', 'none'] : [])], {
+const draft = opt('--draft', null) ? ['-md', opt('--draft', null), '--spec-type', opt('--spec-type', 'draft-dflash'), '-ngld', ngl] : [];
+const server = spawn(bin, ['-m', gguf, '-ngl', ngl, ...cpu, '-c', String(ctx), '--port', String(port), '--jinja', '--timeout', '3600', ...draft, ...(paged ? ['-ot', 'exps=WebGPU_Paged'] : []), ...(rest.includes('--raw') ? ['--reasoning-format', 'none'] : [])], {
   stdio: ['ignore', 'ignore', 'pipe'],
   env: paged ? { ...process.env, GGML_WEBGPU_PAGED_SLOTS: paged, GGML_WEBGPU_PAGED_FILE: gguf } : process.env,
 });
@@ -146,7 +149,7 @@ try {
     console.log(`${c.name}: ${JSON.stringify(content.slice(0, 60))}…`);
   }
   const doc = {
-    about: `llama.cpp ${version || '?'}, ${backend}, -ngl ${ngl}: llama-server ${rest.includes('--raw') ? '/completion on the /apply-template prompt' : '/v1/chat/completions'}, temperature 0, max_tokens 64, on ${basename(gguf)} (sha256 ${await sha256()}). Recorded ${new Date().toISOString().slice(0, 10)} by scripts/record-refs.mjs.`,
+    about: `llama.cpp ${version || '?'}, ${backend}${drafter}, -ngl ${ngl}: llama-server ${rest.includes('--raw') ? '/completion on the /apply-template prompt' : '/v1/chat/completions'}, temperature 0, max_tokens 64, on ${basename(gguf)} (sha256 ${await sha256()}). Recorded ${new Date().toISOString().slice(0, 10)} by scripts/record-refs.mjs.`,
     conversations: result,
   };
   writeFileSync(out, JSON.stringify(doc, null, 1) + '\n');

@@ -4,6 +4,8 @@
 
 #include "chat.h"
 #include "common.h"
+#include "sampling.h"
+#include "speculative.h"
 #include "ggml-backend.h"
 #include "ggml-webgpu.h"
 #include "gguf.h"
@@ -205,6 +207,18 @@ static std::string               g_out;
 static std::string               g_stats;
 static volatile bool             g_abort = false;  // set by df_abort() while a reply streams (JSPI yields between reads)
 
+// Speculative decoding with a drafter GGUF (DFlash, DSpark, MTP, Eagle3 or a plain draft model: the type comes from the
+// drafter's metadata, as llama.cpp's --spec-type auto does). df_set_draft names it before df_load; df_load then sizes
+// the target context for verification and loads the drafter beside it; every reply goes through llama.cpp's own
+// speculative loop (common/speculative.cpp), which stays greedy-identical to plain decoding.
+static std::string                        g_draft_path;
+static common_params                      g_spec_params;
+static common_speculative_init_result_ptr g_spec_init;
+static common_speculative *               g_spec    = nullptr;
+static const int32_t                      DF_DRAFT_N_MAX = 15;  // clamped by each drafter to what it was trained for
+
+extern "C" EMSCRIPTEN_KEEPALIVE void df_set_draft(const char * path) { g_draft_path = path ? path : ""; }
+
 typedef ggml_backend_buffer_type_t (*df_paged_buft_fn)(ggml_backend_dev_t, uint32_t, const ggml_webgpu_page_source *);
 
 // A WebGPU_Paged buffer type with n_slots experts per tensor on the GPU, reading from the GGUF source.
@@ -286,9 +300,8 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char * df_plan(const char * path, double b
             gguf_free(g);
         }
     }
-    if (n_expert == 0 || paged_bytes == 0) {
-        return (g_plan = "{\"error\":\"not a mixture-of-experts GGUF\"}").c_str();
-    }
+    // a dense model has nothing to page: the whole model must fit the budget, which this measures the same way
+    const bool dense_only = n_expert == 0 || paged_bytes == 0;
 
     static llama_model_tensor_buft_override cpu[] = { { DF_PAGED, nullptr }, { nullptr, nullptr } };
     cpu[0].buft = ggml_backend_dev_buffer_type(ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU));
@@ -302,7 +315,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char * df_plan(const char * path, double b
     if (model == nullptr) {
         return (g_plan = "{\"error\":\"cannot load the model\"}").c_str();
     }
-    const size_t per_slot = paged_bytes / n_expert;
+    const size_t per_slot = dense_only ? 0 : paged_bytes / n_expert;
     // reserve: the real load's compute buffer measured 5.5 MiB above this simulation (Gemma 4 26B-A4B, experts paged
     // vs on the CPU), plus the backend's slot maps and parameter buffers
     const size_t reserve  = 32u << 20;
@@ -335,6 +348,13 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char * df_plan(const char * path, double b
         llama_free(ctx);
         ubatch            = u;
         const double room = budget - (double) (dense + kv + compute + reserve);
+        if (dense_only) {
+            slots = room >= 0 ? 0 : -1;
+            if (slots == 0) {
+                break;
+            }
+            continue;
+        }
         slots             = room > 0 ? std::min<long>((long) (room / per_slot), n_expert) : 0;
         if (slots >= (long) n_used) {
             break;
@@ -342,6 +362,29 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char * df_plan(const char * path, double b
     }
     llama_model_free(model);
     g_ubatch = ubatch;
+    // a drafter (df_set_draft) sits on the GPU beside the target: count its weights (its small KV and compute are in
+    // the reserve's margin)
+    if (!g_draft_path.empty()) {
+        if (gguf_context * g = gguf_init_from_file(g_draft_path.c_str(), gp)) {
+            size_t draft_bytes = 0;
+            for (int64_t i = 0; i < gguf_get_n_tensors(g); i++) {
+                draft_bytes += gguf_get_tensor_size(g, i);
+            }
+            gguf_free(g);
+            dense += draft_bytes;
+            const double room = budget - (double) (dense + kv + compute + reserve);
+            slots = dense_only ? (room >= 0 ? 0 : -1) : (room > 0 ? std::min<long>((long) (room / per_slot), n_expert) : 0);
+        }
+    }
+    if (dense_only) {
+        char buf[384];
+        snprintf(buf, sizeof(buf),
+                 "{\"budget\":%.0f,\"dense\":%zu,\"kv\":%zu,\"compute\":%zu,\"reserve\":%zu,\"n_expert\":0,\"ubatch\":%u,"
+                 "\"slots\":0%s}",
+                 budget, dense, kv, compute, reserve, ubatch,
+                 slots < 0 ? ",\"error\":\"the budget does not hold this dense model\"" : "");
+        return (g_plan = buf).c_str();
+    }
 
     char buf[512];
     snprintf(buf, sizeof(buf),
@@ -362,7 +405,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int df_load(const char * path, int n_slots, int 
         fprintf(stderr, "df_load: cannot read GGUF %s\n", path);
         return 1;
     }
-    ggml_backend_buffer_type_t paged = df_paged_buft(n_slots);
+    ggml_backend_buffer_type_t paged = df_paged_buft(std::max(n_slots, 1));  // a dense model pages nothing
     if (paged == nullptr) {
         fprintf(stderr, "df_load: no WebGPU_Paged buffer type (is this the webgpu-diskformer build?)\n");
         return 1;
@@ -390,9 +433,49 @@ extern "C" EMSCRIPTEN_KEEPALIVE int df_load(const char * path, int n_slots, int 
     if (const char * fa = getenv("DF_FLASH_ATTN")) {
         cp.flash_attn_type = atoi(fa) ? LLAMA_FLASH_ATTN_TYPE_ENABLED : LLAMA_FLASH_ATTN_TYPE_DISABLED;
     }
+    common_params & sp = g_spec_params;
+    if (!g_draft_path.empty()) {
+        sp                                 = common_params();
+        sp.speculative.types               = common_speculative_types_from_gguf(g_draft_path);
+        if (sp.speculative.types.empty()) {
+            fprintf(stderr, "df_load: %s is not a drafter llama.cpp knows (no dflash, dspark or MTP metadata)\n", g_draft_path.c_str());
+            return 4;
+        }
+        sp.speculative.draft.mparams.path  = g_draft_path;
+        sp.speculative.draft.n_max         = DF_DRAFT_N_MAX;
+        sp.speculative.draft.backend_sampling = false;  // greedy on the host, as the target's sampler is
+        sp.n_ctx                           = n_ctx;
+        sp.n_batch                         = (int32_t) cp.n_batch;
+        sp.n_ubatch                        = (int32_t) cp.n_ubatch;
+        sp.n_gpu_layers                    = 999;
+        sp.sampling.temp                   = 0.0f;
+#ifdef __EMSCRIPTEN__
+        sp.load_mode = LLAMA_LOAD_MODE_NONE;
+#endif
+        // the target verifies id_last plus a whole draft in one batch, every position an output
+        const auto lim           = common_speculative_get_output_limits(cp.n_batch, 1, common_speculative_n_max(&sp.speculative));
+        cp.n_outputs_max         = (uint32_t) lim.total;
+        cp.n_outputs_max_per_seq = (uint32_t) lim.per_seq;
+        cp.n_rs_seq              = sp.speculative.need_n_rs_seq();
+    }
     g_ctx                   = llama_init_from_model(g_model, cp);
     if (g_ctx == nullptr) {
         return 3;
+    }
+    if (!g_draft_path.empty()) {
+        common_params dp = common_base_params_to_speculative(sp);
+        g_spec_init      = common_speculative_init_from_params(dp, g_model, g_ctx);
+        if (!g_spec_init || !g_spec_init->context()) {
+            fprintf(stderr, "df_load: cannot load the drafter %s\n", g_draft_path.c_str());
+            return 5;
+        }
+        sp.speculative.draft.ctx_tgt = g_ctx;
+        sp.speculative.draft.ctx_dft = g_spec_init->context();
+        g_spec                       = common_speculative_init(sp.speculative, 1);
+        if (g_spec == nullptr) {
+            fprintf(stderr, "df_load: speculative decoding failed to start\n");
+            return 6;
+        }
     }
     // a template llama.cpp's jinja cannot parse must not take the model down: raw prompts (df_complete) still work,
     // and chat calls report the failure
@@ -426,7 +509,149 @@ static std::vector<llama_token> df_tokenize_prompt(const common_chat_prompt & pr
     return tokens;
 }
 
+// The same reply through llama.cpp's speculative loop (examples/speculative-simple): the drafter proposes up to its
+// block, the target verifies id_last plus the draft in one batch, the greedy sampler keeps the agreeing prefix; a
+// context that cannot drop part of a sequence restores a checkpoint instead. Stats add drafted and accepted counts.
+static const char * df_complete_tokens_spec(std::vector<llama_token> tokens, int n_predict) {
+    const llama_vocab * vocab   = llama_model_get_vocab(g_model);
+    llama_context *     ctx_dft = g_spec_params.speculative.draft.ctx_dft;
+    const llama_seq_id  seq_id  = 0;
+    llama_memory_clear(llama_get_memory(g_ctx), true);
+    llama_memory_clear(llama_get_memory(ctx_dft), true);
+
+    g_out.clear();
+    g_abort            = false;
+    const int  n_ctx   = (int) llama_n_ctx(g_ctx);
+    bool       ctx_full = tokens.size() + 1 >= (size_t) n_ctx || tokens.empty();
+    const bool ckpt_tgt = common_context_can_seq_rm(g_ctx) == COMMON_CONTEXT_SEQ_RM_TYPE_FULL;
+    const bool ckpt_dft = common_context_can_seq_rm(ctx_dft) == COMMON_CONTEXT_SEQ_RM_TYPE_FULL;
+
+    common_sampler_ptr smpl(common_sampler_init(g_model, g_spec_params.sampling));
+    common_batch       batch(g_ctx);
+    const int64_t      t0 = ggml_time_us();
+    int64_t            t_first = t0;
+    int                n_decode = 0, n_drafted = 0, n_accept = 0, n_steps = 0;
+    llama_tokens       prompt_tgt, draft;
+    llama_token        id_last = 0;
+    int                n_past  = 0;
+    bool               failed  = false;
+
+    if (!ctx_full) {
+        // the prompt but its last token, in n_batch chunks; each chunk also feeds the drafter
+        for (size_t i = 0; i + 1 < tokens.size() && !failed; i += 512) {
+            const size_t n = std::min<size_t>(512, tokens.size() - 1 - i);
+            batch.clear();
+            for (size_t j = 0; j < n; j++) {
+                batch.add(tokens[i + j], (llama_pos) (i + j), seq_id, false);
+            }
+            failed = llama_process(g_ctx, LLAMA_PROCESS_TYPE_DECODE, batch.get()) || !common_speculative_process(g_spec, batch);
+        }
+        id_last = tokens.back();
+        prompt_tgt.assign(tokens.begin(), tokens.end() - 1);
+        n_past = (int) prompt_tgt.size();
+        common_speculative_begin(g_spec, seq_id, prompt_tgt);
+        t_first = ggml_time_us();
+    }
+
+    common_prompt_checkpoint ckpt;
+    bool                     done = ctx_full || failed;
+    while (!done) {
+        if (draft.empty()) {
+            ckpt.update_pos(prompt_tgt.size(), llama_memory_seq_pos_min(llama_get_memory(g_ctx), seq_id),
+                            llama_memory_seq_pos_max(llama_get_memory(g_ctx), seq_id));
+            if (ckpt_dft) {
+                ckpt.update_dft(ctx_dft, seq_id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
+            }
+            const int n_draft_max = std::max(0, std::min(n_ctx - n_past - 2, n_predict - n_decode - 1));
+            common_speculative_get_draft_params(g_spec, seq_id) = { true, n_draft_max, n_past, id_last, &prompt_tgt, &draft };
+            common_speculative_draft(g_spec);
+            if (!draft.empty() && ckpt_tgt) {
+                ckpt.update_tgt(g_ctx, seq_id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
+            }
+            if (ckpt_dft) {
+                GGML_ASSERT(ckpt.load_dft(ctx_dft, seq_id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY));
+            }
+            llama_memory_seq_rm(llama_get_memory(ctx_dft), seq_id, ckpt.pos_max + 1, -1);
+        }
+
+        batch.clear();
+        batch.add(id_last, n_past++, seq_id, true);
+        for (size_t i = 0; i < draft.size(); ++i) {
+            batch.add(draft[i], n_past + (llama_pos) i, seq_id, true);
+        }
+        if (llama_process(g_ctx, LLAMA_PROCESS_TYPE_DECODE, batch.get()) || !common_speculative_process(g_spec, batch)) {
+            failed = true;
+            break;
+        }
+        n_steps++;
+        common_sampler_ptr smpl_save;
+        if (ckpt_tgt) {
+            smpl_save.reset(common_sampler_clone(smpl.get()));
+        }
+        const size_t n_draft = draft.size();
+        auto         ids     = common_sampler_sample_and_accept_n(smpl.get(), g_ctx, draft);
+        GGML_ASSERT(!ids.empty());
+
+        if (ckpt_tgt && ids.size() - 1 < n_draft) {
+            // partial acceptance without partial removal: back to the checkpoint, the accepted tokens as the draft
+            draft = std::move(ids);
+            GGML_ASSERT(ckpt.load_tgt(g_ctx, seq_id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY));
+            llama_memory_seq_rm(llama_get_memory(g_ctx), seq_id, ckpt.pos_max + 1, -1);
+            GGML_ASSERT(ckpt.load_dft(ctx_dft, seq_id, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY));
+            llama_memory_seq_rm(llama_get_memory(ctx_dft), seq_id, ckpt.pos_max + 1, -1);
+            prompt_tgt.resize(ckpt.n_tokens);
+            smpl   = std::move(smpl_save);
+            n_past = (int) prompt_tgt.size();
+            continue;
+        }
+
+        common_speculative_accept(g_spec, seq_id, (uint16_t) (ids.size() - 1));
+        n_past    += (int) ids.size() - 1;
+        n_drafted += (int) n_draft;
+        n_accept  += (int) ids.size() - 1;
+        for (size_t i = 0; i < ids.size() && !done; ++i) {
+            prompt_tgt.push_back(id_last);
+            id_last = ids[i];
+            if (llama_vocab_is_eog(vocab, id_last) || n_decode >= n_predict) {
+                done = true;
+                break;
+            }
+            const std::string piece = common_token_to_piece(g_ctx, id_last);
+            g_out += piece;
+            df_emit(piece.c_str());
+            n_decode++;
+        }
+        draft.clear();
+        llama_memory_seq_rm(llama_get_memory(g_ctx), seq_id, n_past, -1);
+        llama_memory_seq_rm(llama_get_memory(ctx_dft), seq_id, n_past, -1);
+        if (g_abort) {
+            break;
+        }
+        if (n_past + 2 >= n_ctx) {
+            ctx_full = true;
+            break;
+        }
+        done = done || n_decode >= n_predict;
+    }
+    if (failed) {
+        g_out = "[decode failed]";
+    }
+    const int64_t t1 = ggml_time_us();
+    g_stats = "{\"prompt_tokens\":" + std::to_string(tokens.size()) +
+              ",\"prompt_ms\":" + std::to_string((t_first - t0) / 1000) +
+              ",\"decode_tokens\":" + std::to_string(n_decode) +
+              ",\"decode_ms\":" + std::to_string((t1 - t_first) / 1000) +
+              ",\"draft_steps\":" + std::to_string(n_steps) +
+              ",\"drafted\":" + std::to_string(n_drafted) + ",\"accepted\":" + std::to_string(n_accept) +
+              ",\"n_ctx\":" + std::to_string(n_ctx) + ",\"n_pos\":" + std::to_string(n_past) +
+              ",\"aborted\":" + (g_abort ? "true" : "false") + ",\"context_full\":" + (ctx_full ? "true" : "false") + "}";
+    return g_out.c_str();
+}
+
 static const char * df_complete_tokens(std::vector<llama_token> tokens, int n_predict) {
+    if (g_spec) {
+        return df_complete_tokens_spec(std::move(tokens), n_predict);
+    }
     const llama_vocab *      vocab  = llama_model_get_vocab(g_model);
     llama_memory_clear(llama_get_memory(g_ctx), true);
 
@@ -578,6 +803,10 @@ int main(int argc, char ** argv) {
     if (argc < 4) {
         fprintf(stderr, "usage: %s model.gguf (n_slots | <GB>G) (prompt [n_predict [--no-think]] | --gate refs.json | --record refs.json out.json)\n", argv[0]);
         return 1;
+    }
+    // DF_DRAFT=<drafter.gguf>: speculative decoding with that drafter (DFlash, DSpark, MTP, ...)
+    if (const char * d = getenv("DF_DRAFT")) {
+        df_set_draft(d);
     }
     // n_slots, or a GPU budget in GB ("2.5G") that df_plan turns into slots
     int               n_slots = atoi(argv[2]);
