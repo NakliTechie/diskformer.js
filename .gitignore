@@ -8,3 +8,6 @@ node_modules/
 /marketing
 /brag-output*
 /.claude/
+ggml/build-ds/
+ggml/build-wasm-ds/
+ggml/dist-ds/

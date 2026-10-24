@@ -3,8 +3,10 @@
 // (examples/chat/refs/*.json) with paged experts, and reports how many match. Each run uses a new Chrome profile that
 // is deleted when Chrome exits (Chrome holds the OPFS file until then, so removing it from a page fails), unless
 // --profile names one to keep.
-//   node scripts/chrome-gate.mjs <file.gguf> <refs.json> --models <dir> [--slots 8 | --budget GB] [--draft <drafter.gguf>] [--env K=V,…] [--log chrome.log] [--profile dir] [--keep] [--out x.json]
+//   node scripts/chrome-gate.mjs <file.gguf> <refs.json> --models <dir> [--slots 8 | --budget GB] [--draft <drafter.gguf>] [--extra <side file,…>] [--dist <dir>] [--env K=V,…] [--log chrome.log] [--profile dir] [--keep] [--out x.json]
 // --draft: a drafter GGUF in --models for speculative decoding (DFlash, DSpark, MTP); replies must stay identical.
+// --extra: side files in --models that the model opens beside the GGUF (DeepSeek-V4.1's Engram file).
+// --dist: serve ggml/dist/ from this folder instead, to gate a browser build of another fork branch.
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { createReadStream, realpathSync, openSync } from 'node:fs';
@@ -33,7 +35,8 @@ const server = createServer(async (req, res) => {
     const fromModels = path.startsWith('/models/');
     // --models may hold links to the files elsewhere (gated GGUFs move to an external disk): the name must be inside
     // the folder, its target need not be
-    const p = fromModels ? await linkInside(models, path.slice(8)) : await inside(root, path);
+    const dist = arg('dist') && path.startsWith('/ggml/dist/') ? realpathSync(arg('dist')) : null;
+    const p = fromModels ? await linkInside(models, path.slice(8)) : dist ? await inside(dist, path.slice(11)) : await inside(root, path);
     if (!p) { res.writeHead(404).end(); return; }
     if (!fromModels) { res.writeHead(200, { 'Content-Type': types[extname(p)] || 'application/octet-stream', 'Cache-Control': 'no-store' }).end(await readFile(p)); return; }
     const size = (await stat(p)).size;
@@ -82,7 +85,8 @@ const sizes = await Promise.all(parts.map(async (f) => (await stat(join(models, 
 // --budget <GB> plans slots (and the batch size) from a GPU budget, as the demo page does; else --slots, default 8
 const sizing = arg('budget') ? { budget: arg('budget') } : { slots: arg('slots', '8') };
 // --env NAME=value,NAME=value: driver settings (DF_UBATCH, DF_OUTPUT_CPU, …), as gate.html takes them
-const q = new URLSearchParams({ model: file, refs: '/' + refs.replace(/^\//, ''), ...sizing, url: parts.map((f) => `/models/${f}`).join(','), size: sizes.join(','), ...(arg('env') ? { env: arg('env') } : {}), ...(arg('draft') ? { draft_url: `/models/${arg('draft')}`, draft_size: String((await stat(join(models, arg('draft')))).size) } : {}) });
+const q = new URLSearchParams({ model: file, refs: '/' + refs.replace(/^\//, ''), ...sizing, url: parts.map((f) => `/models/${f}`).join(','), size: sizes.join(','), ...(arg('env') ? { env: arg('env') } : {}), ...(arg('draft') ? { draft_url: `/models/${arg('draft')}`, draft_size: String((await stat(join(models, arg('draft')))).size) } : {}),
+  ...(arg('extra') ? { extra_url: arg('extra').split(',').map((f) => `/models/${f}`).join(','), extra_size: (await Promise.all(arg('extra').split(',').map(async (f) => (await stat(join(models, f))).size))).join(',') } : {}) });
 await send('Page.navigate', { url: `http://127.0.0.1:${port}/ggml/gate.html?${q}` });
 let gate = null, last = '', lastAt = Date.now();
 const stall = Number(arg('stall', 10)) * 60e3;   // no new line on the page for this long: the gate is stuck

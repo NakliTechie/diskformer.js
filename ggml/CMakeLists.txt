@@ -46,8 +46,10 @@ if(EMSCRIPTEN)
         "-sEXPORTED_FUNCTIONS=['_df_load','_df_plan','_df_set_draft','_df_chat','_df_chat_messages','_df_complete','_df_abort','_df_stats','_malloc','_free']"
         "-sJSPI_EXPORTS=['df_plan','df_load','df_chat','df_chat_messages','df_complete']"
         "-sEXPORTED_RUNTIME_METHODS=['FS','WORKERFS','UTF8ToString','stringToNewUTF8','ENV','getExceptionMessage']")
-    # ggml/dist/ is committed: the site and the HF Space serve it, and their CI has no Emscripten
+    # ggml/dist/ is committed: the site and the HF Space serve it, and their CI has no Emscripten. DF_DIST_DIR sends a
+    # build of another fork branch elsewhere, so it does not replace the released files
+    set(DF_DIST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dist CACHE PATH "where the browser build is copied")
     add_custom_command(TARGET df-chat POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE_DIR:df-chat>/df-chat.mjs $<TARGET_FILE_DIR:df-chat>/df-chat.wasm
-                ${CMAKE_CURRENT_SOURCE_DIR}/dist/)
+                ${DF_DIST_DIR}/)
 endif()

@@ -52,8 +52,15 @@
     const d = await next();
     say(`drafter ${draft} in OPFS (${d.ms ? `copied in ${(d.ms / 1000).toFixed(1)} s` : 'already there'})`);
   }
+  // extra_url / extra_size (comma-separated): side files the model opens beside the GGUF, copied into OPFS the same way
+  const extra = q.get('extra_url') ? q.get('extra_url').split(',').map((u) => u.split('/').pop()) : [];
+  for (const [k, u] of (q.get('extra_url') ? q.get('extra_url').split(',') : []).entries()) {
+    worker.postMessage({ type: 'download', url: u, name: extra[k], size: +q.get('extra_size').split(',')[k] });
+    const d = await next();
+    say(`${extra[k]} in OPFS (${d.ms ? `copied in ${(d.ms / 1000).toFixed(1)} s` : 'already there'})`);
+  }
   // budget=<GB> plans the slots from a GPU budget; slots=<n> sets them directly
-  worker.postMessage({ type: 'load', opfsName: q.get('model'), slots: +q.get('slots'), budget: q.get('budget') ? +q.get('budget') * 1e9 : 0, env, draft });
+  worker.postMessage({ type: 'load', opfsName: q.get('model'), slots: +q.get('slots'), budget: q.get('budget') ? +q.get('budget') * 1e9 : 0, env, draft, extra });
   const loaded = await next();
   say(`loaded in ${(loaded.ms / 1000).toFixed(1)} s (rc ${loaded.rc}), ${loaded.slots} slots`);
   const results = [];

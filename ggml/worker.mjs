@@ -3,7 +3,7 @@
 // sync access handles, straight into the wasm heap. A GGUF gets into OPFS by download (resumable, from a URL) or by
 // copying a picked file; with opfs: false a picked File is read in place instead (slower).
 //
-// Messages in: load {opfsName | file, budget | slots, ctx, env, draft} · chat {messages, n, thinking} · complete {prompt, n} (the gate)
+// Messages in: load {opfsName | file, budget | slots, ctx, env, draft, extra} · chat {messages, n, thinking} · complete {prompt, n} (the gate)
 //   · abort · download {url, name, size} · list · remove {name}
 // Messages out: log · progress · plan · loaded · piece · done · downloaded · models · removed · error
 import createModule from './dist/df-chat.mjs';  // built from ggml/build-wasm, see ggml/dist/BUILD.md
@@ -195,8 +195,14 @@ onmessage = async ({ data }) => {
       // draft: a drafter GGUF in OPFS (DFlash, DSpark, MTP...) for speculative decoding; read whole at load, not paged
       const draftFile = data.draft ? await (await ggufDir(false)).getFileHandle(data.draft).then((h) => h.getFile())
         .catch(() => { throw new Error(`${data.draft} is not in OPFS; download the drafter first`); }) : null;
+      // extra: side files the model opens by name beside the GGUF (DeepSeek-V4.1's Engram tables), from OPFS
+      const extraFiles = [];
+      for (const name of data.extra || []) {
+        extraFiles.push(await (await ggufDir(false)).getFileHandle(name).then((h) => h.getFile())
+          .catch(() => { throw new Error(`${name} is not in OPFS; download it first`); }));
+      }
       mod.FS.mkdir('/m');
-      mod.FS.mount(mod.WORKERFS, { files: draftFile ? [...files, draftFile] : files }, '/m');
+      mod.FS.mount(mod.WORKERFS, { files: [...files, ...(draftFile ? [draftFile] : []), ...extraFiles] }, '/m');
       if (draftFile) mod._df_set_draft(str('/m/' + draftFile.name));
       const t0 = performance.now();
       // a GPU budget (bytes) becomes slots through df_plan; else data.slots as given
