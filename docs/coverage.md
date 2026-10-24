@@ -31,6 +31,7 @@ How each row is checked (references and replies in [`examples/chat/refs/`](../ex
 | granitehybrid | Granite 4.0 H Tiny, Q4_K_M | 4.2 GB | 9/9 (unpaged vs 8) | 9/9 | |
 | bailingmoe3 | Ling 3.0 tiny, Q4_K_M | 4.9 GB | 9/9 (unpaged vs 8) | 8/9 vs CPU | Edge0 8B-A1B |
 | bailingmoe3 | Ling 3.0 Flash 124B-A5B, Q4_K_M, split in 2 parts | 77.0 GB | 9/9 (8 vs 32 slots) | 6/9 vs CPU (6 GB budget, 4.1-4.9 tok/s) | |
+| deepseek41 | DeepSeek V4.1 Flash 1017 (763B, 6 of 384 experts), ISTA-DASLab GSQ-RCO IQ1_M, 4 parts + 110.6 GB Engram file | 231.3 GB | not checked | tech demo: 1/1 prompt identical to native in Chrome (8 GB budget, 6 slots, ~0.4 tok/s from an external SSD); layers 0-2 on the CPU match a float64 reference | |
 | gemma4 (dense) | Nemotron 3.5 Bolt E4B, Q4_K_M | 6.18 GB | dense, no experts to page | 9/9 vs llama-server WebGPU (5 GB budget, 30 tok/s) | its DFlash drafter: 9/9, slower (24.7 tok/s) |
 | flint | Flint 40B-A2.5B, Q4_1 | 26.0 GB | 9/9 (8 vs 32 slots) | 6/9 vs CPU | |
 | olmoe | OLMoE 1B-7B 0125 Instruct, Q4_K_M | 4.2 GB | 9/9 (unpaged vs 8) | 8/9 | |

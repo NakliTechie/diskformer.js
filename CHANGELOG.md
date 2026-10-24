@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.9 (2026-10-24)
+- DeepSeek V4.1 Flash 1017 (763B, 6 of 384 experts active) in the chat demo as a tech demo: ISTA-DASLab's GSQ-RCO
+  IQ1_M (4 parts, 120.7 GB) plus its separate Engram tables (110.6 GB), 231.3 GB in all, at an 8 GB GPU budget.
+  In Chrome it loaded in 173 s and answered one prompt as the native build does ("The capital of France is
+  **Paris**."); about 0.4 tok/s natively from an external SSD (1.3 GB of experts read per token). Layers 0-2 on
+  llama.cpp's CPU backend match a float64 reference within llama.cpp's own rounding. Not gated on 9 prompts.
+- The fork (`webgpu-diskformer` at `5ac033a52`) takes draft PR 30817 (DeepSeek-V4.1) with a loader for ISTA's
+  layout (separate Engram file, unfused gate, u32 candidate layer) and WebGPU shaders for its ops:
+  LIGHTNING_INDEXER, DSV4_HC_PRE/POST/COMB, TOP_K_MASK, POOL_1D, ROPE_BACK, f16 CONCAT and BF16 CPY.
+  Regression gates on the new build: Granite 4.0 H Tiny 9/9 and Nemotron 3.5 Bolt E4B 9/9 in Chrome.
+- `load({ extra })` mounts stored side files beside the GGUF; the chat demo downloads a catalog entry's side
+  files with its parts. `scripts/chrome-gate.mjs --extra` and `--dist`.
+
 ## 0.6.8 (2026-10-24)
 - Nemotron 3.5 Bolt E4B (dense, `gemma4`, 6.18 GB) in the chat demo: 9/9 replies identical to llama-server on WebGPU
   in Chrome, 30 tok/s at a 5 GB budget. Three fixes made it run in a browser:

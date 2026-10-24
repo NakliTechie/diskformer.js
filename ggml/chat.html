@@ -127,6 +127,7 @@
 // Models with a recorded gate on this path (examples/chat/refs, plan/width-2026-10-13.md). Sizes are the exact
 // file sizes, so a download is complete only at that size.
 const HF = (repo, file) => `https://huggingface.co/${repo}/resolve/main/${file}`;
+const DS41 = 'ISTA-DASLab/DeepSeek-V4.1-Flash-1017-GSQ-RCO-GGUF';
 const CATALOG = [
   { name: 'LFM2-8B-A1B-Q4_K_M.gguf', label: 'LFM2 8B-A1B', note: 'Liquid AI · 1B active', size: 5044779712, url: HF('LiquidAI/LFM2-8B-A1B-GGUF', 'LFM2-8B-A1B-Q4_K_M.gguf') },
   { name: 'granite-4.0-h-tiny-Q4_K_M.gguf', label: 'Granite 4.0 H Tiny', note: 'IBM · 1B active · Mamba-2 hybrid', size: 4230976352, url: HF('ibm-granite/granite-4.0-h-tiny-GGUF', 'granite-4.0-h-tiny-Q4_K_M.gguf') },
@@ -148,6 +149,14 @@ const CATALOG = [
   // dense. Its DFlash drafter loads (draft: + a second part) and stays greedy-identical, but on WebGPU it is slower than
   // plain decoding (24.7 vs 30.0 tok/s in Chrome, 2026-10-24: a 4-token verify costs about 3 decodes), so it is off
   { name: 'Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf', label: 'Nemotron 3.5 Bolt E4B', note: 'NVIDIA · dense 4B effective · reasons first', size: 6180446208, url: HF('nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB', 'Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf'), budget: 5 },
+  // tech demo: 4 parts plus the Engram tables (a side file the model opens beside the GGUF), 231 GB on disk
+  { name: 'DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00001-of-00004.gguf', label: 'DeepSeek V4.1 Flash', note: 'DeepSeek · 763B, 6 of 384 experts · tech demo, very slow', size: 231316411072, url: HF(DS41, 'DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00001-of-00004.gguf'), budget: 8,
+    extra: ['DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf'],
+    parts: [{ name: 'DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00001-of-00004.gguf', size: 39358830464, url: HF(DS41, 'DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00001-of-00004.gguf') },
+            { name: 'DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00002-of-00004.gguf', size: 39176113248, url: HF(DS41, 'DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00002-of-00004.gguf') },
+            { name: 'DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00003-of-00004.gguf', size: 39997334720, url: HF(DS41, 'DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00003-of-00004.gguf') },
+            { name: 'DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00004-of-00004.gguf', size: 2188841824, url: HF(DS41, 'DeepSeek-V4.1-Flash-1017-GSQ-RCO-IQ1_M-00004-of-00004.gguf') },
+            { name: 'DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf', size: 110595290816, url: HF(DS41, 'DeepSeek-V4.1-Flash-Engram-IQ4_NL.gguf') }] },
 ];
 // A catalog model's files: its parts, or the one file
 // parts: every file a model downloads (split GGUF parts, a drafter, side files); extra: the side files among them that
