@@ -112,7 +112,10 @@ async function chat(messages, maxTokens) {
   return { content, finish };
 }
 
-const server = spawn(bin, ['-m', gguf, '-ngl', ngl, '-c', String(ctx), '--port', String(port), '--jinja', '--timeout', '3600', ...(paged ? ['-ot', 'exps=WebGPU_Paged'] : []), ...(rest.includes('--raw') ? ['--reasoning-format', 'none'] : [])], {
+// CPU: weights stay memory-mapped and are not repacked, so a model larger than RAM loads (Ling 3.0 Flash, 77 GB on a
+// 24 GB Mac: repacking copies every weight into RAM, and the server swapped for minutes and never became healthy).
+const cpu = ngl === '0' ? ['-lm', 'mmap', '--no-repack'] : [];
+const server = spawn(bin, ['-m', gguf, '-ngl', ngl, ...cpu, '-c', String(ctx), '--port', String(port), '--jinja', '--timeout', '3600', ...(paged ? ['-ot', 'exps=WebGPU_Paged'] : []), ...(rest.includes('--raw') ? ['--reasoning-format', 'none'] : [])], {
   stdio: ['ignore', 'ignore', 'pipe'],
   env: paged ? { ...process.env, GGML_WEBGPU_PAGED_SLOTS: paged, GGML_WEBGPU_PAGED_FILE: gguf } : process.env,
 });
@@ -124,7 +127,8 @@ process.on('exit', stop);
 
 try {
   for (let i = 0; ; i++) {
-    if (server.exitCode !== null || failed) throw new Error(`llama-server failed (${failed || `exit ${server.exitCode}`}):\n${log.slice(-2000)}`);
+    // a server killed by a signal has exitCode null and signalCode set
+    if (server.exitCode !== null || server.signalCode !== null || failed) throw new Error(`llama-server failed (${failed || `exit ${server.exitCode ?? server.signalCode}`}):\n${log.slice(-2000)}`);
     const ok = await fetch(`${base}/health`).then((r) => r.ok).catch(() => false);
     if (ok) break;
     if (i > 1800) throw new Error('llama-server did not become healthy in 30 minutes');

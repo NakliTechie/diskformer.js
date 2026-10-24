@@ -153,24 +153,42 @@ onmessage = async ({ data }) => {
         // settings for llama.cpp / ggml-webgpu, e.g. { GGML_WEBGPU_PAGED_STATS: '2' }
         preRun: [(m) => Object.assign(m.ENV, data.env || {})],
       });
-      let file = data.file;
-      let fh = null;
-      if (!file) {
-        fh = await (await ggufDir(false)).getFileHandle(data.opfsName);  // a GGUF already in OPFS, by name
+      // the GGUF's parts: one, or every part of a split GGUF (name-00001-of-0000n.gguf, as published), which llama.cpp
+      // finds by name beside the first and the driver reads part by part
+      let fhs = [], files = null;
+      if (!data.file) {
+        const dir = await ggufDir(false);
+        const split = /^(.*)-00001-of-(\d{5})\.gguf$/.exec(data.opfsName);
+        const names = split ? Array.from({ length: +split[2] }, (_, k) => `${split[1]}-${String(k + 1).padStart(5, '0')}-of-${split[2]}.gguf`) : [data.opfsName];
+        for (const name of names) {
+          fhs.push(await dir.getFileHandle(name).catch(() => { throw new Error(`${name} is not in OPFS; download every part of ${data.opfsName}`); }));
+        }
       } else if (data.opfs !== false) {
-        fh = await opfsCopy(data.file);
+        fhs = [await opfsCopy(data.file)];
+      } else {
+        files = [data.file];
       }
-      if (fh) {
-        file = await fh.getFile();
-        // read-only, so the reader workers can open the same file
-        mod.ggufHandle = await fh.createSyncAccessHandle({ mode: 'read-only' });
+      mod.ggufParts = [];
+      if (fhs.length) {
+        files = [];
         // expert reads in parallel, off this thread (DF_READERS=0: on this thread's handle)
         const n = +((data.env || {}).DF_READERS ?? 8);  // 8: measured 10.66 tok/s vs 9.72 at 4, 10.57 at 16
-        if (n > 0) mod.ggufReaders = await OpfsReaderPool.open(`gguf/${file.name}`, { workers: n });
+        for (const fh of fhs) {
+          const f = await fh.getFile();
+          files.push(f);
+          mod.ggufParts.push({
+            file: f,
+            // read-only, so the reader workers can open the same file
+            handle: await fh.createSyncAccessHandle({ mode: 'read-only' }),
+            readers: n > 0 ? await OpfsReaderPool.open(`gguf/${f.name}`, { workers: n }) : null,
+          });
+        }
+      } else {
+        mod.ggufParts.push({ file: files[0], handle: null, readers: null });
       }
-      mod.ggufFile = file;
+      const file = files[0];
       mod.FS.mkdir('/m');
-      mod.FS.mount(mod.WORKERFS, { files: [file] }, '/m');
+      mod.FS.mount(mod.WORKERFS, { files }, '/m');
       const t0 = performance.now();
       // a GPU budget (bytes) becomes slots through df_plan; else data.slots as given
       let slots = data.slots, plan = null;
@@ -181,7 +199,7 @@ onmessage = async ({ data }) => {
         slots = plan.slots;
       }
       const rc = await mod._df_load(str('/m/' + file.name), slots, data.ctx ?? 1024);
-      post('loaded', { rc, slots, plan, size: file.size, name: file.name, ms: Math.round(performance.now() - t0) });
+      post('loaded', { rc, slots, plan, size: files.reduce((a, f) => a + f.size, 0), name: file.name, parts: files.length, ms: Math.round(performance.now() - t0) });
     } else if (data.type === 'complete') {
       const reply = await mod._df_complete(str(data.prompt), data.n ?? 64);
       post('done', { id: data.id, text: text(reply), stats: JSON.parse(text(mod._df_stats())) });

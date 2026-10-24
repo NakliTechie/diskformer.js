@@ -35,10 +35,14 @@
   out.textContent += env && Object.keys(env).length ? ` · ${q.get('env')}` : '';
   // a failed step ends the gate with an error instead of leaving it waiting (scripts/chrome-gate.mjs reads window.gate)
   window.onunhandledrejection = (e) => { say(`error: ${e.reason && e.reason.message}`); window.gate = { error: String(e.reason && e.reason.message) }; };
+  // url / size: the GGUF to copy into OPFS first; comma-separated for each part of a split GGUF, named as in the URL
   if (q.get('url')) {
-    worker.postMessage({ type: 'download', url: q.get('url'), name: q.get('model'), size: +q.get('size') });
-    const d = await next();
-    say(`in OPFS (${d.ms ? `copied in ${(d.ms / 1000).toFixed(1)} s` : 'already there'})`);
+    const urls = q.get('url').split(','), sizes = q.get('size').split(',').map(Number);
+    for (let k = 0; k < urls.length; k++) {
+      worker.postMessage({ type: 'download', url: urls[k], name: urls.length > 1 ? urls[k].split('/').pop() : q.get('model'), size: sizes[k] });
+      const d = await next();
+      say(`${urls.length > 1 ? `part ${k + 1} of ${urls.length} ` : ''}in OPFS (${d.ms ? `copied in ${(d.ms / 1000).toFixed(1)} s` : 'already there'})`);
+    }
   }
   // budget=<GB> plans the slots from a GPU budget; slots=<n> sets them directly
   worker.postMessage({ type: 'load', opfsName: q.get('model'), slots: +q.get('slots'), budget: q.get('budget') ? +q.get('budget') * 1e9 : 0, env });

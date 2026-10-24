@@ -1,0 +1,117 @@
+{
+ "about": "df-chat --record, native WebGPU with experts paged (8 slots), greedy, on /Volumes/Models2/Models/ling/Ling-3.0-flash-Q4_K_M-00001-of-00002.gguf",
+ "conversations": [
+  {
+   "content": "The user is a new programmer asking about the difference between TCP and UDP. I need to explain this in a clear, beginner-friendly way. Let me think about the key differences:\n\n1. **Connection-oriented vs connectionless**: TCP establishes a connection before sending data (three-way handshake), UDP just sends data without",
+   "messages": [
+    {
+     "content": "Explain the difference between TCP and UDP to a new programmer.",
+     "role": "user"
+    }
+   ],
+   "name": "explain-tcp",
+   "prompt": "<role>SYSTEM</role>detailed thinking on<|role_end|><role>HUMAN</role>Explain the difference between TCP and UDP to a new programmer.<|role_end|><role>ASSISTANT</role>\n<think>",
+   "tokens": 64
+  },
+  {
+   "content": "The user wants me to extract structured data from a sentence and output it as JSON. Let me parse the sentence: \"Priya, 34, moved from Pune to Lisbon last year.\"\n\n- Name: Priya\n- Age: 34\n- City: The sentence mentions two cities - Pune",
+   "messages": [
+    {
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"",
+     "role": "user"
+    }
+   ],
+   "name": "json-extract",
+   "prompt": "<role>SYSTEM</role>detailed thinking on<|role_end|><role>HUMAN</role>Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<|role_end|><role>ASSISTANT</role>\n<think>",
+   "tokens": 64
+  },
+  {
+   "content": "The user wants me to translate an English sentence into Hindi. The sentence is: \"The library opens at nine and closes at six.\"\n\nLet me translate this:\n- \"The library\" = पुस्तकालय (pustakalay)\n- \"opens at nine\"",
+   "messages": [
+    {
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\"",
+     "role": "user"
+    }
+   ],
+   "name": "translate-hi",
+   "prompt": "<role>SYSTEM</role>detailed thinking on<|role_end|><role>HUMAN</role>Translate into Hindi: \"The library opens at nine and closes at six.\"<|role_end|><role>ASSISTANT</role>\n<think>",
+   "tokens": 64
+  },
+  {
+   "content": "Calculate the duration from 14:10 to 17:45.\n\nFrom 14:10 to 17:10 is 3 hours.\nFrom 17:10 to 17:45 is 35 minutes.\nTotal: ",
+   "messages": [
+    {
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.",
+     "role": "user"
+    }
+   ],
+   "name": "word-problem",
+   "prompt": "<role>SYSTEM</role>detailed thinking on<|role_end|><role>HUMAN</role>A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<|role_end|><role>ASSISTANT</role>\n<think>",
+   "tokens": 64
+  },
+  {
+   "content": "The user wants a SQL query that:\n1. Joins the `customers` and `orders` tables\n2. Calculates the total order value per customer (SUM of amount)\n3. Orders by total order value descending\n4. Returns the top 5 customers\n\nI need to join on customer",
+   "messages": [
+    {
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).",
+     "role": "user"
+    }
+   ],
+   "name": "sql",
+   "prompt": "<role>SYSTEM</role>detailed thinking on<|role_end|><role>HUMAN</role>Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<|role_end|><role>ASSISTANT</role>\n<think>",
+   "tokens": 64
+  },
+  {
+   "content": "The user wants five major rivers of Africa, each on its own line, along with the country where each river reaches the sea (its mouth/delta).\n\nLet me think of major African rivers and where they empty into the ocean:\n\n1. Nile River - empties into the Mediterranean Sea in Egypt\n",
+   "messages": [
+    {
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea.",
+     "role": "user"
+    }
+   ],
+   "name": "list-rivers",
+   "prompt": "<role>SYSTEM</role>detailed thinking on<|role_end|><role>HUMAN</role>List five major rivers of Africa, one per line, with the country where each reaches the sea.<|role_end|><role>ASSISTANT</role>\n<think>",
+   "tokens": 64
+  },
+  {
+   "content": "The user is asking about the common meanings of three emojis in text messaging. Let me think about each one:\n\n1. 🙏 - Folded hands. This can mean \"please,\" \"thank you,\" \"prayer,\" or \"please do me a favor.\" In modern texting, it's often used",
+   "messages": [
+    {
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?",
+     "role": "user"
+    }
+   ],
+   "name": "unicode",
+   "prompt": "<role>SYSTEM</role>detailed thinking on<|role_end|><role>HUMAN</role>What do these emoji usually mean in a text message: 🙏 🔥 💀 ?<|role_end|><role>ASSISTANT</role>\n<think>",
+   "tokens": 64
+  },
+  {
+   "content": "The user wants a haiku about autumn leaves in a city. A haiku follows the 5-7-5 syllable structure across three lines. Let me craft one that captures the imagery of autumn leaves in an urban setting.\n\nLet me brainstorm:\n- City + autumn leaves: contrast between nature and",
+   "messages": [
+    {
+     "content": "Write a haiku about autumn leaves in a city.",
+     "role": "user"
+    }
+   ],
+   "name": "haiku-autumn",
+   "prompt": "<role>SYSTEM</role>detailed thinking on<|role_end|><role>HUMAN</role>Write a haiku about autumn leaves in a city.<|role_end|><role>ASSISTANT</role>\n<think>",
+   "tokens": 64
+  },
+  {
+   "content": "The user is asking a straightforward science question. The boiling point of water at sea level (standard atmospheric pressure of 1 atm) is 100°C or 212°F. I need to answer in a cheerful pirate voice, in two sentences.</think>Ahoy, matey! The boiling point of",
+   "messages": [
+    {
+     "content": "Answer like a cheerful pirate, in two sentences.",
+     "role": "system"
+    },
+    {
+     "content": "What is the boiling point of water at sea level?",
+     "role": "user"
+    }
+   ],
+   "name": "system-pirate",
+   "prompt": "<role>SYSTEM</role>Answer like a cheerful pirate, in two sentences.\ndetailed thinking on<|role_end|><role>HUMAN</role>What is the boiling point of water at sea level?<|role_end|><role>ASSISTANT</role>\n<think>",
+   "tokens": 64
+  }
+ ]
+}

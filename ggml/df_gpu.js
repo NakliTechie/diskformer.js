@@ -5,10 +5,11 @@ addToLibrary({
 
   df_upload_batch_js__deps: ['$WebGPU', '$dfStaging'],
   df_upload_batch_js__async: true,
-  df_upload_batch_js: async function (device, n, offsets, sizes, buffers, dstOffsets) {
+  df_upload_batch_js: async function (device, n, files, offsets, sizes, buffers, dstOffsets) {
     const dev = WebGPU.getJsObject(Number(device));
     const S = dfStaging;
-    const readers = Module['ggufReaders'], handle = Module['ggufHandle'], file = Module['ggufFile'];
+    // one entry per part of the GGUF ({ readers, handle, file }); files[i] picks the part of read i
+    const parts = Module['ggufParts'];
     const at = (p, i) => HEAPF64[Number(p) / 8 + i];
     const buf = (i) => WebGPU.getJsObject(Number(HEAPU64[Number(buffers) / 8 + i]));
     for (let i = 0; i < n;) {
@@ -25,6 +26,7 @@ addToLibrary({
       const pending = [];
       while (i < n && pos + at(sizes, i) <= S.size) {
         const o = at(offsets, i), s = at(sizes, i), p = pos;  // p: this read's place in the mapped range
+        const { readers, handle, file } = parts[at(files, i)];
         if (readers) {
           // reads in flight on the reader workers at once; each lands in the mapped range when it returns
           pending.push(readers.read(o, s, S.spare.pop()).then((r) => {

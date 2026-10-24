@@ -26,25 +26,25 @@
 #ifdef __EMSCRIPTEN__
 #    include <emscripten.h>
 EM_JS(void, df_emit, (const char * piece), { if (Module.onPiece) Module.onPiece(UTF8ToString(Number(piece))); });
-// n reads of the GGUF. With an OPFS sync access handle (Module.ggufHandle) each read lands straight in the heap,
-// synchronously; otherwise the picked File (Module.ggufFile) is sliced, all reads in flight at once, and the worker
-// suspends (JSPI) until they land. Pointers arrive as BigInt (memory64); heap views are taken after any await.
-EM_ASYNC_JS(void, df_read_file_batch, (int n, const double * offsets, const double * sizes, char * const * dsts), {
-    const off = Number(offsets) / 8, sz = Number(sizes) / 8, dp = Number(dsts) / 8;
-    const handle = Module.ggufHandle;
-    if (handle) {
+// n reads of the GGUF; files[i] picks the part of a split GGUF (Module.ggufParts, one per part). With an OPFS sync
+// access handle (part.handle) each read lands straight in the heap, synchronously; otherwise the picked File
+// (part.file) is sliced, all reads in flight at once, and the worker suspends (JSPI) until they land. Pointers arrive
+// as BigInt (memory64); heap views are taken after any await.
+EM_ASYNC_JS(void, df_read_file_batch, (int n, const double * files, const double * offsets, const double * sizes, char * const * dsts), {
+    const fl = Number(files) / 8, off = Number(offsets) / 8, sz = Number(sizes) / 8, dp = Number(dsts) / 8;
+    const parts = Module.ggufParts;
+    if (parts.every((p) => p.handle)) {
         for (let i = 0; i < n; i++) {
             const dst = Number(HEAPU64[dp + i]), s = HEAPF64[sz + i];
-            const got = handle.read(HEAPU8.subarray(dst, dst + s), { at: HEAPF64[off + i] });
+            const got = parts[HEAPF64[fl + i]].handle.read(HEAPU8.subarray(dst, dst + s), { at: HEAPF64[off + i] });
             if (got !== s) throw new Error(`short OPFS read: ${got} of ${s}`);
         }
         return;
     }
-    const file = Module.ggufFile;
     const reqs = [];
     for (let i = 0; i < n; i++) {
         const o = HEAPF64[off + i], s = HEAPF64[sz + i];
-        reqs.push(file.slice(o, o + s).arrayBuffer());
+        reqs.push(parts[HEAPF64[fl + i]].file.slice(o, o + s).arrayBuffer());
     }
     const bufs = await Promise.all(reqs);
     for (let i = 0; i < n; i++) HEAPU8.set(new Uint8Array(bufs[i]), Number(HEAPU64[dp + i]));
@@ -88,12 +88,14 @@ static void df_src_read_batch(void * ud, size_t n, const char * const * names, c
     }
     g_read_calls += (double) n;
 #ifdef __EMSCRIPTEN__
-    std::vector<double> o(n), sz(n);
+    std::vector<double> f(n), o(n), sz(n);
     for (size_t i = 0; i < n; i++) {
-        o[i]  = (double) (src->offsets.at(names[i]).off + offs[i]);
+        const df_tensor_at & at = src->offsets.at(names[i]);
+        f[i]  = (double) at.file;
+        o[i]  = (double) (at.off + offs[i]);
         sz[i] = (double) sizes[i];
     }
-    df_read_file_batch((int) n, o.data(), sz.data(), (char * const *) dsts);
+    df_read_file_batch((int) n, f.data(), o.data(), sz.data(), (char * const *) dsts);
 #else
     // a few threads, each with its own FILE per part
     const size_t             n_threads = std::min<size_t>(n, 8);
@@ -126,21 +128,23 @@ static void df_src_read_batch(void * ud, size_t n, const char * const * names, c
 
 #ifdef __EMSCRIPTEN__
 // df_gpu.js: n ranges of the GGUF into GPU buffers through mapped staging buffers
-extern "C" void df_upload_batch_js(void * device, int n, const double * offsets, const double * sizes,
+extern "C" void df_upload_batch_js(void * device, int n, const double * files, const double * offsets, const double * sizes,
                                    void * const * buffers, const double * dst_offsets);
 
 static void df_src_upload_batch(void * ud, void * device, size_t n, const char * const * names, const size_t * offs,
                                 const size_t * sizes, void * const * buffers, const size_t * dst_offs) {
     auto *              src = (df_gguf_source *) ud;
-    std::vector<double> o(n), sz(n), d(n);
+    std::vector<double> f(n), o(n), sz(n), d(n);
     g_read_calls += (double) n;
     for (size_t i = 0; i < n; i++) {
         g_read_bytes += (double) sizes[i];
-        o[i]  = (double) (src->offsets.at(names[i]).off + offs[i]);
+        const df_tensor_at & at = src->offsets.at(names[i]);
+        f[i]  = (double) at.file;
+        o[i]  = (double) (at.off + offs[i]);
         sz[i] = (double) sizes[i];
         d[i]  = (double) dst_offs[i];
     }
-    df_upload_batch_js(device, (int) n, o.data(), sz.data(), buffers, d.data());
+    df_upload_batch_js(device, (int) n, f.data(), o.data(), sz.data(), buffers, d.data());
 }
 #endif
 
@@ -178,10 +182,6 @@ static bool df_src_open(const char * path) {
     if (count <= 1) {
         return df_src_open_part(path, 0);
     }
-#ifdef __EMSCRIPTEN__
-    fprintf(stderr, "df: split GGUFs (%d parts) are not read in the browser yet\n", count);
-    return false;
-#endif
     char prefix[4096];
     if (llama_split_prefix(prefix, sizeof(prefix), path, 0, count) == 0) {
         fprintf(stderr, "df: %s is not named as part 1 of %d\n", path, count);
@@ -261,12 +261,31 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char * df_plan(const char * path, double b
     const uint32_t n_used   = nu_key >= 0 ? gguf_get_val_u32(gguf, nu_key) : 0;
     size_t paged_bytes = 0;
     const std::regex paged_re(DF_PAGED);
-    for (int64_t i = 0; i < gguf_get_n_tensors(gguf); i++) {
-        if (std::regex_search(gguf_get_tensor_name(gguf, i), paged_re)) {
-            paged_bytes += gguf_get_tensor_size(gguf, i);
+    const auto add_paged = [&](gguf_context * g) {
+        for (int64_t i = 0; i < gguf_get_n_tensors(g); i++) {
+            if (std::regex_search(gguf_get_tensor_name(g, i), paged_re)) {
+                paged_bytes += gguf_get_tensor_size(g, i);
+            }
+        }
+    };
+    add_paged(gguf);
+    // a split GGUF: the experts in the other parts count too
+    const int64_t split_key = gguf_find_key(gguf, "split.count");
+    const int     n_split   = split_key >= 0 ? (int) gguf_get_val_u16(gguf, split_key) : 1;
+    gguf_free(gguf);
+    char prefix[4096];
+    if (n_split > 1 && llama_split_prefix(prefix, sizeof(prefix), path, 0, n_split) > 0) {
+        for (int k = 1; k < n_split; k++) {
+            char part[4096];
+            llama_split_path(part, sizeof(part), prefix, k, n_split);
+            gguf_context * g = gguf_init_from_file(part, gp);
+            if (g == nullptr) {
+                return (g_plan = std::string("{\"error\":\"cannot read ") + part + "\"}").c_str();
+            }
+            add_paged(g);
+            gguf_free(g);
         }
     }
-    gguf_free(gguf);
     if (n_expert == 0 || paged_bytes == 0) {
         return (g_plan = "{\"error\":\"not a mixture-of-experts GGUF\"}").c_str();
     }
@@ -557,7 +576,7 @@ static std::string df_expected(const std::string & prompt, const std::string & c
 // df-chat <model.gguf> <n_slots> --gate <refs.json>   replay llama.cpp's replies; exit 1 on any difference
 int main(int argc, char ** argv) {
     if (argc < 4) {
-        fprintf(stderr, "usage: %s model.gguf (n_slots | <GB>G) (prompt [n_predict [--no-think]] | --gate refs.json)\n", argv[0]);
+        fprintf(stderr, "usage: %s model.gguf (n_slots | <GB>G) (prompt [n_predict [--no-think]] | --gate refs.json | --record refs.json out.json)\n", argv[0]);
         return 1;
     }
     // n_slots, or a GPU budget in GB ("2.5G") that df_plan turns into slots
@@ -573,6 +592,35 @@ int main(int argc, char ** argv) {
     }
     if (int rc = df_load(argv[1], n_slots, 1024)) {
         return rc;
+    }
+    // --record: the conversations of another model's refs, rendered with this model's template and answered here
+    // (greedy, 64 tokens each), written as refs for gate.html; for a model llama-server cannot page
+    // (a split GGUF), so its native paged replies are the reference the browser is checked against
+    if (std::string(argv[3]) == "--record" && argc > 5) {
+        std::ifstream  in(argv[4]);
+        nlohmann::json refs = nlohmann::json::parse(in), out = { { "conversations", nlohmann::json::array() } };
+        out["about"] = std::string("df-chat --record, native WebGPU with experts paged (") + std::to_string(n_slots) + " slots), greedy, on " + argv[1];
+        for (const auto & c : refs["conversations"]) {
+            common_chat_templates_inputs inputs;
+            inputs.use_jinja = true;
+            for (const auto & m : c["messages"]) {
+                common_chat_msg msg;
+                msg.role    = m.at("role").get<std::string>();
+                msg.content = m.at("content").get<std::string>();
+                inputs.messages.push_back(msg);
+            }
+            inputs.add_generation_prompt = true;
+            std::string prompt;
+            for (const auto & part : common_chat_templates_apply(g_tmpls.get(), inputs).prompt.parts) {
+                prompt += part.text;
+            }
+            const int n = 64;  // every reply the same length (the source refs stopped where their own model did)
+            out["conversations"].push_back({ { "name", c["name"] }, { "messages", c["messages"] }, { "prompt", prompt },
+                                             { "content", std::string(df_complete(prompt.c_str(), n)) }, { "tokens", n } });
+            fprintf(stderr, "%s done\n", c["name"].get<std::string>().c_str());
+        }
+        std::ofstream(argv[5]) << out.dump(1);
+        return 0;
     }
     if (std::string(argv[3]) != "--gate") {
         const int n_predict = argc > 4 ? atoi(argv[4]) : 64;

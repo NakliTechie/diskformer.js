@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.5 (2026-10-24)
+- The browser build loads a split GGUF (`name-00001-of-0000n.gguf`, as published): the worker opens every part from
+  OPFS and mounts them together, `df_read_file_batch` and `df_upload_batch_js` read experts from the part that holds
+  them, and `df_plan` sums the paged bytes over all parts. `gate.html` and `scripts/chrome-gate.mjs` take every part.
+  Ling 3.0 Flash (124B-A5B, `bailingmoe3`, 2 parts, 77 GB) in Chrome at a 6 GB budget: copied into OPFS in 126 s,
+  loaded in 60 s (22 slots), 4.1-4.9 tok/s; 6/9 replies match llama.cpp on the CPU (4 identical, 2 where the CPU reply
+  is a prefix of Chrome's), the other 3 are coherent and differ where two words score almost the same. Paging exact
+  natively, 9/9 at 8 vs 32 slots; Granite 4.0 H Tiny rechecked 9/9 in Chrome.
+- Native `df-chat <gguf> <slots> --record <refs.json> <out.json>` renders each gate conversation with the model's own
+  template and records 64-token replies, for models whose reference cannot come from llama-server on Metal.
+- `scripts/record-refs.mjs`: CPU references (`--ngl 0`) keep the weights memory-mapped and unrepacked
+  (`-lm mmap --no-repack`), so a model larger than RAM loads; a server killed by a signal now stops the run instead of
+  leaving it waiting for 30 minutes.
+
 ## 0.6.4 (2026-10-23)
 - `engines/lfm2_5.js` (LFM2.5 230M/1.2B, `Lfm2Mobile`), `engines/gemma-4-e2b.js` (Gemma 4 E2B/E4B, `Gemma4Mobile`) and
   `engines/ternary_bonsai_2_27b.js` (`TernaryBonsai2`), from LocalMind main a02f06e. Held back in 0.6.0 because their

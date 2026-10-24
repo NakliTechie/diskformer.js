@@ -71,11 +71,14 @@ let id = 0; const pend = new Map(); ws.onmessage = (e) => { const m = JSON.parse
 const send = (method, params = {}) => new Promise((r) => { const n = ++id; pend.set(n, r); ws.send(JSON.stringify({ id: n, method, params })); });
 const ev = async (expression) => { const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }); return r.result && r.result.result && r.result.result.value; };
 
-const size = (await stat(join(models, file))).size;
+// a split GGUF (name-00001-of-0000n.gguf): every part is copied, and the gate loads the first
+const split = /^(.*)-00001-of-(\d{5})\.gguf$/.exec(file);
+const parts = split ? Array.from({ length: +split[2] }, (_, k) => `${split[1]}-${String(k + 1).padStart(5, '0')}-of-${split[2]}.gguf`) : [file];
+const sizes = await Promise.all(parts.map(async (f) => (await stat(join(models, f))).size));
 // --budget <GB> plans slots (and the batch size) from a GPU budget, as the demo page does; else --slots, default 8
 const sizing = arg('budget') ? { budget: arg('budget') } : { slots: arg('slots', '8') };
 // --env NAME=value,NAME=value: driver settings (DF_UBATCH, DF_OUTPUT_CPU, …), as gate.html takes them
-const q = new URLSearchParams({ model: file, refs: '/' + refs.replace(/^\//, ''), ...sizing, url: `/models/${file}`, size: String(size), ...(arg('env') ? { env: arg('env') } : {}) });
+const q = new URLSearchParams({ model: file, refs: '/' + refs.replace(/^\//, ''), ...sizing, url: parts.map((f) => `/models/${f}`).join(','), size: sizes.join(','), ...(arg('env') ? { env: arg('env') } : {}) });
 await send('Page.navigate', { url: `http://127.0.0.1:${port}/ggml/gate.html?${q}` });
 let gate = null, last = '', lastAt = Date.now();
 const stall = Number(arg('stall', 10)) * 60e3;   // no new line on the page for this long: the gate is stuck
