@@ -145,6 +145,11 @@ const CATALOG = [
   { name: 'Ling-3.0-flash-Q4_K_M-00001-of-00002.gguf', label: 'Ling 3.0 Flash 124B', note: 'Ant Group · 5B active · reasons first · 2 parts', size: 77010144672, url: HF('inclusionAI/Ling-3.0-flash-GGUF', 'Q4_K_M/Ling-3.0-flash-Q4_K_M-00001-of-00002.gguf'), budget: 6,
     parts: [{ name: 'Ling-3.0-flash-Q4_K_M-00001-of-00002.gguf', size: 49995534208, url: HF('inclusionAI/Ling-3.0-flash-GGUF', 'Q4_K_M/Ling-3.0-flash-Q4_K_M-00001-of-00002.gguf') },
             { name: 'Ling-3.0-flash-Q4_K_M-00002-of-00002.gguf', size: 27014610464, url: HF('inclusionAI/Ling-3.0-flash-GGUF', 'Q4_K_M/Ling-3.0-flash-Q4_K_M-00002-of-00002.gguf') }] },
+  // dense, with a DFlash drafter: both files download together, and the drafter speculates (replies stay greedy-identical)
+  { name: 'Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf', label: 'Nemotron 3.5 Bolt E4B', note: 'NVIDIA · dense 4B effective · DFlash drafter · reasons first', size: 6917258304, url: HF('nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB', 'Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf'), budget: 5,
+    draft: 'Nemotron-3.5-Bolt-E4B-DFlash-BF16.gguf',
+    parts: [{ name: 'Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf', size: 6180446208, url: HF('nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB', 'Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf') },
+            { name: 'Nemotron-3.5-Bolt-E4B-DFlash-BF16.gguf', size: 736812096, url: HF('nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB-DFlash', 'Nemotron-3.5-Bolt-E4B-DFlash-BF16.gguf') }] },
 ];
 // A catalog model's files: its parts, or the one file
 const partsOf = (m) => m.parts || [{ name: m.name, size: m.size, url: m.url }];
@@ -263,18 +268,19 @@ async function load(m, file) {
   status(file ? `Copying ${file.name} into this browser's storage, then loading` : `Loading ${m.label} from this browser's storage`);
   const t0 = performance.now();
   try {
-    const d = await send({ type: 'load', ...(file ? { file } : { opfsName: m.name }), budget, ctx }, ['loaded'], (x) => {
+    const d = await send({ type: 'load', ...(file ? { file } : { opfsName: m.name, draft: m.draft || null }), budget, ctx }, ['loaded'], (x) => {
       if (x.type === 'progress') { fill(x.copied / x.total); status(`Copying into this browser's storage (once): ${GB(x.copied)} of ${GB(x.total)}`); }
       else if (x.type === 'plan' && !x.plan.error) status(`Planning: ${x.plan.slots} expert slots on the GPU, then loading the dense layers`);
     });
     if (d.rc !== 0) throw new Error(`llama.cpp could not load the model (code ${d.rc}); see the log below`);
-    const p = d.plan, gpu = p.dense + p.kv + p.compute + d.slots * p.per_slot;
+    const p = d.plan, gpu = p.dense + p.kv + p.compute + d.slots * (p.per_slot || 0);   // a dense model has no slots
     loaded = { name: d.name, label: m ? m.label : d.name, size: d.size, plan: p, slots: d.slots };
     $('mDisk').textContent = GB(d.size);
     $('mGpu').textContent = GB(gpu);
     $('mGpuNote').textContent = `on the GPU, budget ${GB(budget)}`;
-    $('mSlots').textContent = `${d.slots} of ${p.n_expert}`;
-    $('mSlotsNote').textContent = `experts per layer cached on the GPU; ${p.n_used} used per token`;
+    $('mSlots').textContent = p.n_expert ? `${d.slots} of ${p.n_expert}` : 'dense';
+    $('mSlotsNote').textContent = p.n_expert ? `experts per layer cached on the GPU; ${p.n_used} used per token`
+      : `the whole model is on the GPU${d.draft ? `; ${d.draft} drafts tokens` : ''}`;
     $('mSpeed').textContent = '–'; $('mRead').textContent = '–';
     $('meterCard').hidden = false; $('q').placeholder = `Ask ${loaded.label} something`;
     fill(1);
