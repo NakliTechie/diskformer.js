@@ -150,6 +150,8 @@ const CATALOG = [
   { name: 'Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf', label: 'Nemotron 3.5 Bolt E4B', note: 'NVIDIA · dense 4B effective · reasons first', size: 6180446208, url: HF('nvidia/NVIDIA-Nemotron-3.5-Bolt-E4B-4GB', 'Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf'), budget: 5 },
 ];
 // A catalog model's files: its parts, or the one file
+// parts: every file a model downloads (split GGUF parts, a drafter, side files); extra: the side files among them that
+// load mounts beside the GGUF (DeepSeek-V4.1's Engram tables)
 const partsOf = (m) => m.parts || [{ name: m.name, size: m.size, url: m.url }];
 const $ = (id) => document.getElementById(id);
 const GB = (n) => (n / 1e9).toFixed(n >= 1e10 ? 1 : 2) + ' GB';
@@ -266,7 +268,7 @@ async function load(m, file) {
   status(file ? `Copying ${file.name} into this browser's storage, then loading` : `Loading ${m.label} from this browser's storage`);
   const t0 = performance.now();
   try {
-    const d = await send({ type: 'load', ...(file ? { file } : { opfsName: m.name, draft: m.draft || null }), budget, ctx }, ['loaded'], (x) => {
+    const d = await send({ type: 'load', ...(file ? { file } : { opfsName: m.name, draft: m.draft || null, extra: m.extra || [] }), budget, ctx }, ['loaded'], (x) => {
       if (x.type === 'progress') { fill(x.copied / x.total); status(`Copying into this browser's storage (once): ${GB(x.copied)} of ${GB(x.total)}`); }
       else if (x.type === 'plan' && !x.plan.error) status(`Planning: ${x.plan.slots} expert slots on the GPU, then loading the dense layers`);
     });
