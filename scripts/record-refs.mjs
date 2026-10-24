@@ -4,7 +4,7 @@
 // (-ot exps=WebGPU_Paged, read from the GGUF), so paged and unpaged runs of one backend can be compared
 // (scripts/compare-refs.mjs).
 //
-//   node scripts/record-refs.mjs <model.gguf> <out.json> [--port 8799] [--ctx 4096] [--server <llama-server>] [--paged <slots>] [--ngl 0 (CPU)] [--no-stream] [--raw] [--draft <drafter.gguf> --spec-type <t>]
+//   node scripts/record-refs.mjs <model.gguf> <out.json> [--port 8799] [--ctx 4096] [--server <llama-server>] [--paged <slots>] [--ngl 0 (CPU)] [--no-stream] [--raw] [--draft <drafter.gguf> --spec-type <t> --draft-max <n>]
 // --draft: speculative decoding with a drafter (-md, --spec-type, e.g. draft-dflash); greedy replies must not change.
 // --raw: the reply as generated, reasoning included (--reasoning-format none), as the browser driver returns it; for
 // models that reason first (gpt-oss), whose 64-token reply is otherwise empty. The reply is generated from the stored
@@ -117,7 +117,7 @@ async function chat(messages, maxTokens) {
 // CPU: weights stay memory-mapped and are not repacked, so a model larger than RAM loads (Ling 3.0 Flash, 77 GB on a
 // 24 GB Mac: repacking copies every weight into RAM, and the server swapped for minutes and never became healthy).
 const cpu = ngl === '0' ? ['-lm', 'mmap', '--no-repack'] : [];
-const draft = opt('--draft', null) ? ['-md', opt('--draft', null), '--spec-type', opt('--spec-type', 'draft-dflash'), '-ngld', ngl] : [];
+const draft = opt('--draft', null) ? ['-md', opt('--draft', null), '--spec-type', opt('--spec-type', 'draft-dflash'), '-ngld', ngl, ...(opt('--draft-max', null) ? ['--spec-draft-n-max', opt('--draft-max', null)] : [])] : [];
 const server = spawn(bin, ['-m', gguf, '-ngl', ngl, ...cpu, '-c', String(ctx), '--port', String(port), '--jinja', '--timeout', '3600', ...draft, ...(paged ? ['-ot', 'exps=WebGPU_Paged'] : []), ...(rest.includes('--raw') ? ['--reasoning-format', 'none'] : [])], {
   stdio: ['ignore', 'ignore', 'pipe'],
   env: paged ? { ...process.env, GGML_WEBGPU_PAGED_SLOTS: paged, GGML_WEBGPU_PAGED_FILE: gguf } : process.env,

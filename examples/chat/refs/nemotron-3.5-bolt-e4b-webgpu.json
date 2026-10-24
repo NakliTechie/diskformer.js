@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp fork build 11823 (ecaa47b29), WebGPU, -ngl 99: llama-server /completion on the /apply-template prompt, temperature 0, max_tokens 64, on Nemotron-3.5-Bolt-E4B-Q4_K_M.gguf (sha256 c8af2b8aea10a690a1d9491db744a9446660173cb38fc489612b556615a69612). Recorded 2026-10-24 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nExplain the difference between TCP and UDP to a new programmer.<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\nHere's a plan to structure the explanation:\n1.  **Analogy:** Start with a simple, relatable analogy (e.g., sending a letter vs. a phone call).\n2.  **Core Difference:** Define TCP (reliable, connection-oriented) and UDP (fast,",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nExtract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\nThinking Process:\n1.  **Analyze the request:** Extract name, city, and age from the sentence and format as JSON.\n2.  **",
+   "finish": "stop",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nTranslate into Hindi: \"The library opens at nine and closes at six.\"<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\nThinking Process:\n\n1.  **Analyze the English sentence:** \"The library opens at nine and closes at six.\"\n2.  **Identify key components and their Hindi equivalents:**\n    *   The library: पुस्तकालय (pustakalay) or लाइब्रेरी (library - common usage).\n",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nA train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\nHere's the plan to calculate the journey duration:\n1.  Start time: 14:10\n2.  End time: 17:45\n3.  Calculate the time difference.\n\n*   From 14:10 to 15:",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nWrite a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\nHere's a plan to write the SQL query:\n1.  **Join** `customers` and `orders` on `customers.id = orders.customer_id`.\n2.  **Group** the results by customer (e.g., `customer.id` and `customer",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nList five major rivers of Africa, one per line, with the country where each reaches the sea.<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\nHere's a thinking process to fulfill the request:\n1.  **Identify the request:** List five major rivers of Africa",
+   "finish": "stop",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nWhat do these emoji usually mean in a text message: 🙏 🔥 💀 ?<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\nHere's a plan to analyze the emoji combination:\n1.  Analyze each emoji individually (🙏, 🔥, 💀).\n2.  Determine common meanings in text/internet slang.\n3.  Analyze the combination for overall tone and context.\n4.  Provide nuanced interpretations (",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nWrite a haiku about autumn leaves in a city.<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\nHere's a thinking process for generating the haiku:\n1.  **Analyze",
+   "finish": "stop",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\nAnswer like a cheerful pirate, in two sentences.<turn|>\n<|turn>user\nWhat is the boiling point of water at sea level?<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\nThinking Process:\n1.  **Identify the core question:** Boiling point of water at sea level. (Answer: 100°C or 212°F).",
+   "finish": "stop",
+   "tokens": 41
+  }
+ ]
+}

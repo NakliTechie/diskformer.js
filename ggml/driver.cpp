@@ -215,7 +215,11 @@ static std::string                        g_draft_path;
 static common_params                      g_spec_params;
 static common_speculative_init_result_ptr g_spec_init;
 static common_speculative *               g_spec    = nullptr;
-static const int32_t                      DF_DRAFT_N_MAX = 15;  // clamped by each drafter to what it was trained for
+// 3, llama.cpp's own default: replies stay identical to plain greedy (Nemotron 3.5 Bolt E4B + DFlash on WebGPU, 9/9).
+// Longer drafts verify in bigger batches, whose WebGPU kernels round differently: llama-server itself drifts at 7 (7/9
+// vs plain), and this loop more (5/9 vs llama-server at 7, 16% of drafts accepted against 65% at 3); DF_DRAFT_N_MAX
+// overrides it for that open investigation.
+static const int32_t                      DF_DRAFT_N_MAX = 3;
 
 extern "C" EMSCRIPTEN_KEEPALIVE void df_set_draft(const char * path) { g_draft_path = path ? path : ""; }
 
@@ -442,8 +446,7 @@ extern "C" EMSCRIPTEN_KEEPALIVE int df_load(const char * path, int n_slots, int 
             return 4;
         }
         sp.speculative.draft.mparams.path  = g_draft_path;
-        sp.speculative.draft.n_max         = DF_DRAFT_N_MAX;
-        sp.speculative.draft.backend_sampling = false;  // greedy on the host, as the target's sampler is
+        sp.speculative.draft.n_max         = getenv("DF_DRAFT_N_MAX") ? atoi(getenv("DF_DRAFT_N_MAX")) : DF_DRAFT_N_MAX;
         sp.n_ctx                           = n_ctx;
         sp.n_batch                         = (int32_t) cp.n_batch;
         sp.n_ubatch                        = (int32_t) cp.n_ubatch;
@@ -452,11 +455,18 @@ extern "C" EMSCRIPTEN_KEEPALIVE int df_load(const char * path, int n_slots, int 
 #ifdef __EMSCRIPTEN__
         sp.load_mode = LLAMA_LOAD_MODE_NONE;
 #endif
-        // the target verifies id_last plus a whole draft in one batch, every position an output
+        // the target verifies id_last plus a whole draft in one batch, every position an output; the drafter's context
+        // is built from sp and needs the same limits (a block drafter such as DFlash outputs every block position:
+        // with the default of 1 per sequence its drafts were wrong, and the replies drifted from plain greedy)
         const auto lim           = common_speculative_get_output_limits(cp.n_batch, 1, common_speculative_n_max(&sp.speculative));
+        sp.n_outputs_max         = lim.total;
+        sp.n_outputs_max_per_seq = lim.per_seq;
         cp.n_outputs_max         = (uint32_t) lim.total;
         cp.n_outputs_max_per_seq = (uint32_t) lim.per_seq;
         cp.n_rs_seq              = sp.speculative.need_n_rs_seq();
+        // as llama.cpp's speculative tools build it (common_context_params_to_llama): a window-sized SWA cache, so a
+        // partly accepted draft rolls back through a checkpoint
+        cp.swa_full              = sp.swa_full;
     }
     g_ctx                   = llama_init_from_model(g_model, cp);
     if (g_ctx == nullptr) {
