@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.11 (2026-10-30)
+- Republishes 0.6.10's tagged files. npm 0.6.10 was packed from a working tree that held uncommitted, unchecked
+  speech-output work in `engines/lfm3_omni.js` (854 lines against the tag's 628); 0.6.11 carries the tag's engine.
+  No code change from v0.6.10.
+
 ## 0.6.10 (2026-10-30)
 - LFM3-Omni-2B (`engines/lfm3_omni.js`, `Lfm3Omni`): LiquidAI's ONNX export (decoder_q4f16, vision_encoder_q8,
   audio_encoder; 2.14 GB) on onnxruntime-web 1.30.0's WebGPU EP, because transformers.js 4.3.2 has no `lfm3_omni`
