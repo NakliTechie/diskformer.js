@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.10 (2026-10-30)
+- LFM3-Omni-2B (`engines/lfm3_omni.js`, `Lfm3Omni`): LiquidAI's ONNX export (decoder_q4f16, vision_encoder_q8,
+  audio_encoder; 2.14 GB) on onnxruntime-web 1.30.0's WebGPU EP, because transformers.js 4.3.2 has no `lfm3_omni`
+  class. Text, image and speech in (16 kHz, at most 30 s a clip), text out; streaming (`onText`, `onToken`, a
+  transformers.js streamer), an AbortSignal, `enable_thinking`, `tools` (tool calls stay raw text). Model files go to
+  Cache Storage 'diskformer-models'; `Lfm3Omni.cached()` / `deleteCache()` list and remove them by name.
+- Gate `test/browser/lfm3-omni.html`: prompt ids and 32 greedy tokens equal Liquid's runner on onnxruntime's CPU EP
+  (`scripts/lfm3-omni-ref.py`) for text, image and speech, 3/3, plus a reload from Cache Storage with no network
+  requests. onnxruntime-web 1.31.1 diverged at token 28 on one case, so the engine pins 1.30.0.
+- anyformer 0.4.13 runs it as `MODELS.chat.LFM3_OMNI_2B` (back end `diskformer-onnx`).
+- `examples/run-demo.mjs --query` passes extra page parameters.
+
 ## 0.6.9 (2026-10-24)
 - DeepSeek V4.1 Flash 1017 (763B, 6 of 384 experts active) in the chat demo as a tech demo: ISTA-DASLab's GSQ-RCO
   IQ1_M (4 parts, 120.7 GB) plus its separate Engram tables (110.6 GB), 231.3 GB in all, at an 8 GB GPU budget.
