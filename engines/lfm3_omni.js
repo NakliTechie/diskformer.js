@@ -28,9 +28,14 @@
  *
  * Text slots follow lfm3_audio.session.generate_ids in TEXT mode: the placeholders (<|audio|>, <|audio_out|>,
  * <|image|>, <|video|>), <|mixed_start|> and <|audio_start|> are suppressed; <|im_end|> or <|text_end|> ends the turn.
- * Speech output (layer 2, not built): the step already returns the last hidden state, which the depth decoder
- * (MaskGIT, 12 codes per frame) reads, and takes `audio_out_codes`, the codes of the frame fed back as <|audio_out|>;
- * output_modalities: ['text', 'audio'] will switch generate() to lfm3_audio's TEXT / AUDIO / INTERLEAVED machine.
+ * Speech output (output_modalities: ['text', 'audio']) is lfm3-omni-infer's s2s mode, lfm3_audio.session.generate_ids'
+ * TEXT / AUDIO / INTERLEAVED machine: the system turn "Respond with interleaved text and audio." (when the messages
+ * have none) and <|mixed_start|> after the generation prompt; then 6 text slots and 12 speech frames in turn until
+ * <|text_end|>, after which speech goes on to its end-of-audio frame. A frame is 12 codes from the fp32 depth
+ * decoder, MaskGIT in 3 passes of 4 codebooks over the decoder's hidden state (audio_temperature 0.4, repetition
+ * penalty 1.2 over the last 64 frames, from generation_config.json); it goes back into the decoder as <|audio_out|>
+ * with audio_out_codes. Every 12 frames (and at the end) the fp32 codec decoder turns the new frames, with 20 frames
+ * of left context, into STFT rows, and an overlap-add inverse STFT gives 24 kHz Float32 PCM to onAudio.
  *
  * Model files go to Cache Storage ('diskformer-models', keyed by URL) on the first load and come from there later;
  * load({ force: true }) downloads again, Lfm3Omni.deleteCache({ baseUrl }) removes this model's entries by name.
@@ -46,6 +51,8 @@ export const LFM3_OMNI_2B = {
   repo: 'LiquidAI/LFM3-Omni-2B-ONNX',
   baseUrl: 'https://huggingface.co/LiquidAI/LFM3-Omni-2B-ONNX/resolve/main/',
   graphs: { decoder: 'onnx/decoder_q4f16.onnx', vision: 'onnx/vision_encoder_q8.onnx', audio: 'onnx/audio_encoder.onnx' },
+  // speech out, loaded with load({ speech: true }) or on the first generate() that asks for audio
+  speechGraphs: { depth: 'onnx/depth_decoder.onnx', codec: 'onnx/codec_decoder.onnx' },
   json: ['config.json', 'generation_config.json', 'processor_config.json', 'tokenizer.json', 'tokenizer_config.json'],
 };
 // The model card: prefill at most this many ids per decoder run
@@ -408,12 +415,127 @@ export async function fetchCached(url, { cache = null, force = false, onProgress
   return out;
 }
 
+// ── Speech out: MaskGIT frames, the codec, the inverse STFT ───────────────────────────────────────────────────────
+// Codec frames re-decoded before each chunk's new frames. The codec is causal (5 conv layers of kernel 7, 3 attention
+// layers of window 30, over 6 rows per frame), so a row sees at most 5·6 + 3·29 = 117 rows back: 20 frames covers it.
+export const CODEC_CONTEXT_FRAMES = 20;
+export const SPEECH_SYSTEM_PROMPT = 'Respond with interleaved text and audio.';
+
+// A random permutation of 0..n-1 (Fisher-Yates over rand): one MaskGIT order
+export function randomOrder(n, rand = Math.random) {
+  const o = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; }
+  return o;
+}
+
+// Codes [12] of one frame (lfm3_audio.session.sample_frame): the order split by the schedule; per pass one depth run
+// on (hidden, codes so far, mask of the hidden codebooks) and each picked codebook sampled from its logits with the
+// repetition penalty over its own column of history; all audio_eos_code when any code is.
+// depth(hidden, codes BigInt64Array [12], masked Uint8Array [12]) → Float32Array [12 · codebook_size]
+export async function sampleFrame(hidden, depth, { order, schedule = [4, 4, 4], codebook_size = 2017, audio_eos_code = 2016, sampling = {}, history = [], rand = Math.random }) {
+  const K = order.length;
+  if ([...order].sort((a, b) => a - b).some((v, i) => v !== i)) throw new Error(`MaskGIT order ${order} is not a permutation`);
+  const codes = new BigInt64Array(K), masked = new Uint8Array(K).fill(1);
+  let at = 0;
+  for (const n of schedule) {
+    const pick = order.slice(at, at + n); at += n;
+    const logits = await depth(hidden, codes, masked);
+    for (const k of pick) {
+      const col = history.map((f) => f[k]);
+      codes[k] = BigInt(sampleToken(logits.subarray(k * codebook_size, (k + 1) * codebook_size), sampling, col, [], rand));
+    }
+    for (const k of pick) masked[k] = 0;
+  }
+  const frame = Array.from(codes, Number);
+  return frame.includes(audio_eos_code) ? frame.fill(audio_eos_code) : frame;
+}
+
+// Speech sampling of generate()'s audio_* options, as lfm3_audio's sample_token reads them: temperature 0 (or none
+// and no top-k) is argmax; a top-k without a temperature samples at temperature 1.
+export function audioSampling({ audio_temperature, audio_top_k, audio_repetition_penalty } = {}) {
+  const greedy = audio_temperature === 0 || (audio_temperature == null && !audio_top_k);
+  return { do_sample: !greedy, temperature: audio_temperature ?? 1, top_k: audio_top_k ?? 0, repetition_penalty: audio_repetition_penalty ?? 1 };
+}
+
+// liquid-audio's inverse STFT with "same" padding (lfm2_audio.infer.istft_same_padding), fed row by row: each row is
+// codec_decoder.onnx's [log-magnitude (n_fft/2+1), phase (n_fft/2+1)]; irfft, periodic Hann (float64), overlap-add,
+// divide by the summed window², trim (n_fft − hop)/2 at both ends. push() returns the samples no later row can change;
+// end() the rest. Offline and streamed output are the same samples.
+export class Istft {
+  constructor(n_fft = 1280, hop = 320) {
+    this.N = n_fft; this.hop = hop; this.bins = n_fft / 2 + 1; this.pad = (n_fft - hop) >> 1;
+    this.win = Float64Array.from({ length: n_fft }, (_, i) => 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n_fft));
+    this.cos = Float64Array.from({ length: n_fft }, (_, i) => Math.cos((2 * Math.PI * i) / n_fft));
+    this.sin = Float64Array.from({ length: n_fft }, (_, i) => Math.sin((2 * Math.PI * i) / n_fft));
+    this.wave = new Float64Array(0); this.env = new Float64Array(0); this.rows = 0; this.emitted = 0;
+  }
+  #grow(size) {
+    if (this.wave.length >= size) return;
+    const n = Math.max(size, this.wave.length * 2), w = new Float64Array(n), e = new Float64Array(n);
+    w.set(this.wave); e.set(this.env); this.wave = w; this.env = e;
+  }
+  // rows: Float32Array of whole rows (n_fft + 2 each)
+  push(rows) {
+    const { N, bins, hop } = this, width = 2 * bins, count = rows.length / width;
+    this.#grow((this.rows + count - 1) * hop + N);
+    const re = new Float64Array(bins), im = new Float64Array(bins);
+    for (let r = 0; r < count; r++) {
+      const base = r * width, o = (this.rows + r) * hop;
+      for (let k = 0; k < bins; k++) { const m = Math.exp(rows[base + k]), ph = rows[base + bins + k]; re[k] = m * Math.cos(ph); im[k] = m * Math.sin(ph); }
+      for (let n = 0; n < N; n++) {
+        // numpy irfft: the imaginary parts of bins 0 and N/2 are dropped
+        let x = re[0] + (n & 1 ? -re[bins - 1] : re[bins - 1]);
+        for (let k = 1, a = n; k < bins - 1; k++, a = (a + n) % N) x += 2 * (re[k] * this.cos[a] - im[k] * this.sin[a]);
+        this.wave[o + n] += (x / N) * this.win[n];
+        this.env[o + n] += this.win[n] * this.win[n];
+      }
+    }
+    this.rows += count;
+    return this.#take(this.rows * hop);
+  }
+  end() { return this.rows ? this.#take((this.rows - 1) * this.hop + this.N - this.pad) : new Float32Array(0); }
+  #take(upTo) {
+    const from = this.pad + this.emitted, to = Math.max(from, upTo);
+    const out = new Float32Array(to - from);
+    for (let i = 0; i < out.length; i++) out[i] = this.wave[from + i] / this.env[from + i];
+    this.emitted += out.length;
+    return out;
+  }
+}
+
+// Streams one utterance's frames to PCM: decode(final) runs the codec on the frames not yet decoded plus up to
+// CODEC_CONTEXT_FRAMES before them, keeps the new frames' rows and pushes them through the inverse STFT.
+// codec(codes BigInt64Array [12 · F], F) → Float32Array [6F · (n_fft + 2)]
+export class SpeechStream {
+  constructor(codec, { num_codebooks = 12, frame_stack = 6, n_fft = 1280, hop = 320, context = CODEC_CONTEXT_FRAMES } = {}) {
+    Object.assign(this, { codec, K: num_codebooks, stack: frame_stack, width: n_fft + 2, context });
+    this.istft = new Istft(n_fft, hop); this.frames = []; this.done = 0;
+  }
+  push(frame) { this.frames.push(frame); }
+  get pending() { return this.frames.length - this.done; }
+  async decode(final = false) {
+    const parts = [];
+    if (this.pending) {
+      const start = Math.max(0, this.done - this.context), F = this.frames.length - start, K = this.K;
+      // audio_codes [1, 12, F]: codebook-major
+      const codes = new BigInt64Array(K * F);
+      for (let f = 0; f < F; f++) for (let k = 0; k < K; k++) codes[k * F + f] = BigInt(this.frames[start + f][k]);
+      const rows = await this.codec(codes, F);
+      parts.push(this.istft.push(rows.subarray((this.done - start) * this.stack * this.width)));
+      this.done = this.frames.length;
+    }
+    if (final) parts.push(this.istft.end());
+    return concat(parts);
+  }
+}
+
 // ── The engine ────────────────────────────────────────────────────────────────────────────────────────────────────
 export class Lfm3Omni {
   // opts: baseUrl (the repo layout) or files { 'onnx/decoder_q4f16.onnx': URL | Blob | ArrayBuffer | Uint8Array, … };
   // ort (onnxruntime-web/webgpu module), transformers (for PreTrainedTokenizer) or tokenizer; device 'webgpu';
   // onProgress({ status: 'download' | 'cache', file, loaded, total }) while a file arrives, then 'session' per graph;
-  // cacheName (CACHE_NAME; null: no Cache Storage) and force (download again, replacing the stored copies)
+  // cacheName (CACHE_NAME; null: no Cache Storage) and force (download again, replacing the stored copies);
+  // speech: also load the speech-out graphs now (else the first generate() with audio output loads them)
   static async load(opts = {}) {
     const { baseUrl = LFM3_OMNI_2B.baseUrl, files = {}, device = 'webgpu', onProgress = () => {}, cacheName = CACHE_NAME, force = false } = opts;
     const src = (name) => files[name] ?? new URL(name, baseUrl.endsWith('/') ? baseUrl : baseUrl + '/').href;
@@ -442,7 +564,7 @@ export class Lfm3Omni {
     // the graph and its external data, both read here (byte progress); the session is built from the bytes, which
     // are dropped once onnxruntime holds the weights
     const graph = async (role) => {
-      const file = LFM3_OMNI_2B.graphs[role];
+      const file = LFM3_OMNI_2B.graphs[role] ?? LFM3_OMNI_2B.speechGraphs[role];
       const model = await bytes(file), data = await bytes(file + '_data');
       onProgress({ status: 'session', file });
       return { model, data, dataPath: file.split('/').pop() + '_data' };
@@ -451,19 +573,47 @@ export class Lfm3Omni {
     const vision = await createSession(ort, await graph('vision'), sessionOpts);
     const audio = await createSession(ort, await graph('audio'), sessionOpts);
     const decoder = await OrtLfm3Decoder.create(ort, await graph('decoder'), sessionOpts, config.text_config);
+    const m = new Lfm3Omni({ ort, tokenizer, config, gen, processor, vision, audio, decoder });
+    // the speech graphs, built when first needed from the same file source and cache
+    m.loadSpeechGraphs = async () => ({ depth: await createSession(ort, await graph('depth'), sessionOpts), codec: await createSession(ort, await graph('codec'), sessionOpts) });
+    if (opts.speech) await m.loadSpeech();
     onProgress({ status: 'ready' });
-    return new Lfm3Omni({ ort, tokenizer, config, gen, processor, vision, audio, decoder });
+    return m;
   }
 
-  // Every file load() reads, relative to baseUrl
-  static files() {
-    return [...LFM3_OMNI_2B.json, 'chat_template.jinja', ...Object.values(LFM3_OMNI_2B.graphs).flatMap((g) => [g, g + '_data'])];
+  // The depth and codec sessions (speech out); loaded once
+  async loadSpeech() {
+    if (!this.depth) {
+      if (!this.loadSpeechGraphs) throw new Error('no speech graphs: load the engine with Lfm3Omni.load()');
+      this.speechLoading ??= this.loadSpeechGraphs().then(({ depth, codec }) => { this.depth = depth; this.codec = codec; });
+      await this.speechLoading;
+    }
+    return this;
+  }
+  // depth_decoder.onnx: logits [12 · codebook_size] of one frame
+  async depthLogits(hidden, codes, masked) {
+    const T = this.ort.Tensor, K = codes.length;
+    const out = await this.depth.run({ hidden_states: new T('float32', hidden, [1, hidden.length]), codes: new T('int64', codes, [1, K]), masked: new T('bool', masked, [1, K]) });
+    const l = Float32Array.from(out.logits.data); out.logits.dispose?.();
+    return l;
+  }
+  // codec_decoder.onnx: stft_features [6F · (n_fft + 2)] of frames (codebook-major codes [12 · F])
+  async codecRows(codes, F) {
+    const out = await this.codec.run({ audio_codes: new this.ort.Tensor('int64', codes, [1, this.speech.num_codebooks, F]) });
+    const r = Float32Array.from(out.stft_features.data); out.stft_features.dispose?.();
+    return r;
+  }
+
+  // Every file load() reads, relative to baseUrl (with speech: also the speech-out graphs)
+  static files({ speech = false } = {}) {
+    const graphs = { ...LFM3_OMNI_2B.graphs, ...(speech ? LFM3_OMNI_2B.speechGraphs : {}) };
+    return [...LFM3_OMNI_2B.json, 'chat_template.jinja', ...Object.values(graphs).flatMap((g) => [g, g + '_data'])];
   }
   // Stored copies of this model's files under baseUrl: [{ file, url, bytes }] (bytes from the stored length)
   static async cached({ baseUrl = LFM3_OMNI_2B.baseUrl, cacheName = CACHE_NAME } = {}) {
     if (!globalThis.caches) return [];
     const cache = await caches.open(cacheName), out = [];
-    for (const file of Lfm3Omni.files()) {
+    for (const file of Lfm3Omni.files({ speech: true })) {
       const url = new URL(file, baseUrl.endsWith('/') ? baseUrl : baseUrl + '/').href, r = await cache.match(url);
       if (r) out.push({ file, url, bytes: Number(r.headers.get('content-length')) || null });
     }
@@ -494,9 +644,10 @@ export class Lfm3Omni {
       mixed_start: t('mixed_start_token_id', 125015), eos: config.text_config.eos_token_id,
       think_end: tokenizer.convert_tokens_to_ids?.('</think>') ?? null,
     };
-    // the speech-output layer reads these (lfm3_audio.config): not used in text mode
+    // speech out (lfm3_audio.config), and the codec's STFT (audio_tokenizer/config.json's values for this checkpoint)
     this.speech = { num_codebooks: t('num_codebooks', 12), codebook_size: t('codebook_size', 2017), audio_eos_code: t('audio_eos_code', 2016),
-      maskgit_schedule: t('maskgit_schedule', [4, 4, 4]), interleaved_n_text: t('interleaved_n_text', 6), interleaved_n_audio: t('interleaved_n_audio', 12) };
+      maskgit_schedule: t('maskgit_schedule', [4, 4, 4]), interleaved_n_text: t('interleaved_n_text', 6), interleaved_n_audio: t('interleaved_n_audio', 12),
+      frame_stack: 6, n_fft: 1280, hop: 320, sampling_rate: 24000 };
   }
 
   // The chat template's text and ids (placeholders expanded) of messages; media come back for the encoders.
@@ -561,7 +712,10 @@ export class Lfm3Omni {
   // (AbortSignal) is read before every decode step; an abort resolves, it does not throw.
   async generate(messages, opts = {}) {
     const { max_new_tokens = 1024, signal, onText, onToken, streamer, seed, output_modalities = ['text'] } = opts;
-    if (output_modalities.includes('audio')) throw new Error('LFM3-Omni speech output is not built yet (text only)');
+    if (output_modalities.includes('audio')) {
+      if (!output_modalities.includes('text')) throw new Error("LFM3-Omni speaks in interleaved mode: output_modalities ['text', 'audio']");
+      return this.#generateSpeech(messages, opts);
+    }
     const sampling = { do_sample: opts.do_sample ?? false, temperature: opts.temperature ?? 1, top_k: opts.top_k ?? 0,
       top_p: opts.top_p ?? 1, min_p: opts.min_p ?? 0, repetition_penalty: opts.repetition_penalty ?? 1 };
     const rand = seed === undefined ? Math.random : mulberry32(seed);
@@ -595,6 +749,74 @@ export class Lfm3Omni {
     return { text, stopReason, tokens, ...this.decodeText(tokens) };
   }
 
+  // Interleaved text and speech (lfm3_audio.session.generate_ids from <|mixed_start|>). max_new_tokens counts slots,
+  // text tokens and frames alike. Text streams as in generate(); speech as onAudio(Float32Array 24 kHz) every
+  // audio_chunk_frames frames and at the end; signal is read before every slot. orders: a function returning one
+  // MaskGIT order per frame, or an array of them (a reference replay); default random from seed.
+  // Resolves { text, stopReason, tokens, reasoning, content, audio: Float32Array, audio_codes: frames, sampling_rate }.
+  async #generateSpeech(messages, opts) {
+    const { max_new_tokens = 1024, signal, onText, onToken, onAudio, streamer, seed, audio_chunk_frames = 12 } = opts;
+    await this.loadSpeech();
+    const g = this.generationConfig, S = this.speech, T = this.tokens;
+    const text = { do_sample: opts.do_sample ?? false, temperature: opts.temperature ?? 1, top_k: opts.top_k ?? 0,
+      top_p: opts.top_p ?? 1, min_p: opts.min_p ?? 0, repetition_penalty: opts.repetition_penalty ?? 1 };
+    const audio = audioSampling({ audio_temperature: opts.audio_temperature ?? g.audio_temperature ?? 0.4, audio_top_k: opts.audio_top_k ?? g.audio_top_k,
+      audio_repetition_penalty: opts.audio_repetition_penalty ?? g.audio_repetition_penalty ?? 1.2 });
+    const window = opts.audio_repetition_window ?? g.audio_repetition_window ?? 64;
+    const rand = seed === undefined ? Math.random : mulberry32(seed);
+    const orderOf = Array.isArray(opts.orders) ? ((i) => opts.orders[i]) : typeof opts.orders === 'function' ? opts.orders : () => randomOrder(S.num_codebooks, rand);
+    const msgs = messages.some((m) => m.role === 'system') ? messages : [{ role: 'system', content: SPEECH_SYSTEM_PROMPT }, ...messages];
+    const p = await this.prepare(msgs, { ...opts, enable_thinking: false });
+    const ids = [...p.ids, T.mixed_start];
+    const side = { image_features: p.pics.length ? await this.encodeImages(p.pics) : undefined, audio_features: p.mels.length ? await this.encodeAudio(p.mels) : undefined };
+    const suppress = [T.audio, T.audio_out, T.image, T.video];
+    const stream = new SpeechStream((c, F) => this.codecRows(c, F), { num_codebooks: S.num_codebooks, frame_stack: S.frame_stack, n_fft: S.n_fft, hop: S.hop });
+    const tokens = [], textIds = [], textHistory = [], history = [], frames = [], chunks = [];
+    let stopReason = 'length', sent = 0, mode = 'interleaved', slotsLeft = S.interleaved_n_text, speaking = false, textDone = false, nFrames = 0;
+    const emitText = () => {
+      if (!onText) return;
+      const full = this.tokenizer.decode(textIds, { skip_special_tokens: true });
+      if (full.length > sent && !full.endsWith('\uFFFD')) { onText(full.slice(sent)); sent = full.length; }
+    };
+    const flush = async (final) => { const pcm = await stream.decode(final); if (pcm.length) { chunks.push(pcm); onAudio?.(pcm); } };
+    try {
+      let { logits, hidden } = await this.prefill(ids, side);
+      for (let step = 0; step < max_new_tokens; step++) {
+        if (signal?.aborted) { stopReason = 'aborted'; break; }
+        const interleaving = mode === 'interleaved';
+        let next, codes, finished = false;
+        if (mode === 'audio' || (interleaving && speaking)) {
+          const frame = await sampleFrame(hidden, (h, c, m) => this.depthLogits(h, c, m), { order: orderOf(nFrames++), schedule: S.maskgit_schedule,
+            codebook_size: S.codebook_size, audio_eos_code: S.audio_eos_code, sampling: audio, history, rand });
+          if (frame[0] === S.audio_eos_code) mode = 'text';
+          else {
+            history.push(frame); if (history.length > window) history.shift();
+            frames.push(frame); tokens.push(T.audio_out); stream.push(frame);
+            if (stream.pending >= audio_chunk_frames) await flush(false);
+          }
+          next = T.audio_out; codes = BigInt64Array.from(frame, BigInt);
+        } else {
+          const tok = sampleToken(logits, text, textHistory, suppress, rand);
+          tokens.push(tok); textHistory.push(tok); if (textHistory.length > 32) textHistory.shift();
+          if (tok === T.text_end) { if (interleaving) textDone = speaking = true; else finished = true; }
+          else if (tok === T.eos) finished = true;
+          else if (!interleaving && tok === T.audio_start) mode = 'audio';
+          else if (!interleaving && tok === T.mixed_start) { mode = 'interleaved'; slotsLeft = S.interleaved_n_text; speaking = false; textDone = false; }
+          if (tok !== T.text_end && tok !== T.eos) { textIds.push(tok); streamer?.put?.([[BigInt(tok)]]); onToken?.(tok); emitText(); }
+          next = tok;
+        }
+        if (interleaving && !textDone && --slotsLeft === 0) { speaking = !speaking; slotsLeft = speaking ? S.interleaved_n_audio : S.interleaved_n_text; }
+        if (finished) { stopReason = 'eos'; break; }
+        if (step === max_new_tokens - 1) break;
+        ({ logits, hidden } = await this.decoder.step([next], codes ? { audio_out_codes: codes } : {}));
+      }
+      if (stopReason !== 'aborted') await flush(true);
+    } finally { this.decoder.reset(); streamer?.end?.(); }
+    const all = this.tokenizer.decode(textIds, { skip_special_tokens: true });
+    if (onText && all.length > sent) onText(all.slice(sent));
+    return { text: all, stopReason, tokens, ...this.decodeText(textIds), audio: concat(chunks), audio_codes: frames, sampling_rate: S.sampling_rate };
+  }
+
   // Greedy ids after prompt ids (the gate's comparison): no template, no stop on EOS unless asked.
   async greedyIds(ids, side = {}, n = 32, { stopAtEos = true } = {}) {
     const T = this.tokens, suppress = [T.audio, T.audio_out, T.image, T.video, T.mixed_start, T.audio_start], out = [];
@@ -618,7 +840,11 @@ export class Lfm3Omni {
     return { content: dec(tokens.slice(k + 1)).trimStart(), reasoning: dec(tokens.slice(0, k)).replace(/^\s*<think>/, '').trim() };
   }
 
-  async dispose() { this.ready = false; await this.decoder.dispose(); await this.vision.release(); await this.audio.release(); }
+  async dispose() {
+    this.ready = false;
+    await this.decoder.dispose(); await this.vision.release(); await this.audio.release();
+    if (this.depth) { await this.depth.release(); await this.codec.release(); this.depth = this.codec = null; }
+  }
 }
 
 function concat(parts) {

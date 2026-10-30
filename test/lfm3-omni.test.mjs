@@ -1,6 +1,7 @@
 // engines/lfm3_omni.js's pure-JS parts against scripts/lfm3-omni-ref.py's fixture (test/refs/lfm3-omni): log-mel
 // features, image preprocessing (resize, normalize, patches), the prompt ids (chat template, placeholders), the
-// audio length cap and the Cache Storage layer (fetchCached, against an in-memory stand-in).
+// audio length cap, the Cache Storage layer (fetchCached, against an in-memory stand-in), and the speech-out parts:
+// the inverse STFT against numpy (speech-out.json, istft.*), chunked codec decoding, MaskGIT frames, s2s prompt ids.
 //   node test/lfm3-omni.test.mjs
 // The prompt-id check needs the model's tokenizer files (LFM3_OMNI_DIR, default the Models2 copy) and transformers.js
 // 4.3.2 (TRANSFORMERS_JS: its package folder or entry file, else the `@huggingface/transformers` package); without
@@ -8,6 +9,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { Istft, SpeechStream, sampleFrame, audioSampling, randomOrder, SPEECH_SYSTEM_PROMPT } from '../engines/lfm3_omni.js';
 import { Lfm3Omni, fetchCached, checkAudio, MAX_AUDIO_SECONDS, logMel, melFrames, speechTokens, MEL, preprocessImage, imageConfig, expandPlaceholders, sampleToken, smartResize } from '../engines/lfm3_omni.js';
 
 const dir = new URL('./refs/lfm3-omni/', import.meta.url);
@@ -95,6 +97,61 @@ let passed = 0;
   assert.deepEqual(await fetchCached('u/y', { fetchImpl }), data, 'no cache: a plain download');
   passed++;
 }
+const so = JSON.parse(readFileSync(new URL('speech-out.json', dir)));
+{ // inverse STFT: the codec rows of the reference's first frames to numpy's wave, within 1e-4 of its peak; fed in
+  // uneven pieces it gives the same samples
+  const rows = new Float32Array(bin(so.istft.rows_file)), ref = new Float32Array(bin(so.istft.wave_file));
+  const { n_fft, hop_length } = so.istft, width = n_fft + 2;
+  const t0 = performance.now();
+  const one = new Istft(n_fft, hop_length), whole = concatF([one.push(rows), one.end()]);
+  const ms = performance.now() - t0;
+  assert.equal(whole.length, ref.length, 'rows · hop samples');
+  let worst = 0, peak = 0;
+  for (let i = 0; i < ref.length; i++) { worst = Math.max(worst, Math.abs(whole[i] - ref[i])); peak = Math.max(peak, Math.abs(ref[i])); }
+  console.log(`istft ${rows.length / width} rows → ${whole.length} samples in ${ms.toFixed(0)} ms: max |diff| ${worst.toExponential(2)} of peak ${peak.toFixed(4)}`);
+  assert.ok(worst <= 1e-4 * peak, `istft max |diff| ${worst}`);
+  const parts = new Istft(n_fft, hop_length), out = [];
+  for (const [a, b] of [[0, 1], [1, 7], [7, 13], [13, rows.length / width]]) out.push(parts.push(rows.subarray(a * width, b * width)));
+  out.push(parts.end());
+  assert.deepEqual(concatF(out), whole, 'streamed iSTFT = offline');
+  passed++;
+}
+{ // SpeechStream: with a fake causal codec (each row depends on its own frame only) streamed chunks equal one decode
+  const K = 12, width = 1282, frames = so.frames.slice(0, 7);
+  const codec = async (codes, F) => {
+    const r = new Float32Array(6 * F * width);
+    for (let f = 0; f < F; f++) for (let j = 0; j < 6; j++) for (let x = 0; x < width; x++) r[((f * 6) + j) * width + x] = Math.sin(Number(codes[(x % K) * F + f]) * 0.001 + x * 0.01 + j) * (x < 641 ? 0.5 : 3);
+    return r;
+  };
+  const a = new SpeechStream(codec), b = new SpeechStream(codec), got = [];
+  for (const [i, f] of frames.entries()) { a.push(f); b.push(f); if (i % 3 === 2) got.push(await a.decode(false)); }
+  got.push(await a.decode(true));
+  const once = await b.decode(true);
+  assert.equal(once.length, frames.length * 1920);
+  assert.deepEqual(concatF(got), once, 'chunked speech = one decode');
+  passed++;
+}
+{ // MaskGIT: 3 passes in the order's schedule, each sees the codes revealed so far; an EOS code makes an EOS frame;
+  // the repetition penalty reads each codebook's own history column
+  const seen = [];
+  const depth = async (h, codes, masked) => {
+    seen.push([Array.from(codes, Number), Array.from(masked)]);
+    const l = new Float32Array(12 * 2017);
+    for (let k = 0; k < 12; k++) { l[k * 2017 + 100 + k] = 5; l[k * 2017 + 200 + k] = 4.9; }
+    return l;
+  };
+  const order = [9, 2, 7, 4, 5, 11, 0, 3, 6, 10, 8, 1];
+  const f = await sampleFrame(new Float32Array(4), depth, { order, sampling: audioSampling({ audio_temperature: 0, audio_repetition_penalty: 1.2 }), history: [Array.from({ length: 12 }, (_, k) => k === 3 ? 103 : 0)] });
+  assert.equal(seen.length, 3);
+  assert.deepEqual(seen[1][1], Array.from({ length: 12 }, (_, k) => [9, 2, 7, 4].includes(k) ? 0 : 1), 'pass 2 sees the first 4 revealed');
+  assert.equal(f[9], 109); assert.equal(f[3], 203, 'codebook 3 penalised its repeat');
+  const eos = await sampleFrame(new Float32Array(4), async () => { const l = new Float32Array(12 * 2017); l[5 * 2017 + 2016] = 9; return l; }, { order });
+  assert.ok(eos.every((c) => c === 2016), 'any EOS code → an all-EOS frame');
+  assert.deepEqual(audioSampling({ audio_temperature: 0.4 }), { do_sample: true, temperature: 0.4, top_k: 0, repetition_penalty: 1 });
+  assert.equal(audioSampling({}).do_sample, false);
+  assert.deepEqual([...randomOrder(12, () => 0.5)].sort((x, y) => x - y), Array.from({ length: 12 }, (_, i) => i));
+  passed++;
+}
 
 // prompt ids: the engine's prepare() with transformers.js's tokenizer and the model's template
 const model = process.env.LFM3_OMNI_DIR || '/Volumes/Models2/Models/lfm3/omni-2b-onnx';
@@ -118,8 +175,13 @@ if (!tf || !existsSync(`${model}/tokenizer.json`)) {
     assert.deepEqual(ids, c.prompt_ids, `${c.name}: prompt ids`);
     console.log(`prompt ids ${c.name}: ${ids.length} identical`);
   }
+  const sp = await m.prepare([{ role: 'system', content: SPEECH_SYSTEM_PROMPT }, { role: 'user', content: [{ type: 'audio', audio: wave }] }]);
+  assert.deepEqual([...sp.ids, m.tokens.mixed_start], so.prompt_ids, 's2s prompt ids (system turn, <|mixed_start|> appended)');
+  console.log(`prompt ids s2s: ${so.prompt_ids.length} identical`);
   const think = await m.prepare([{ role: 'user', content: 'Hi' }], { enable_thinking: true });
   assert.ok(think.prompt.endsWith('<|im_start|>assistant\n<think>'), 'enable_thinking opens a <think> block');
   passed++;
 }
 console.log(`lfm3-omni: ${passed} checks passed`);
+
+function concatF(parts) { const o = new Float32Array(parts.reduce((a, p) => a + p.length, 0)); let i = 0; for (const p of parts) { o.set(p, i); i += p.length; } return o; }
