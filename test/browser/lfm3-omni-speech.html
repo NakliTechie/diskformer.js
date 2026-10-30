@@ -56,10 +56,16 @@ try {
   const frameDiv = so.frames.findIndex((f, i) => !r.audio_codes[i] || f.some((c, k) => r.audio_codes[i][k] !== c));
   const ours = stats(r.audio), rel = (a, b) => Math.abs(a - b) / Math.max(Math.abs(b), 1e-9);
   const replay = { slots: r.tokens.length, refSlots: so.tokens.length, firstSlotDivergence: slotDiv, frames: r.audio_codes.length, refFrames: so.frames.length,
-    firstFrameDivergence: frameDiv, text: r.text, refText: so.text, wave: ours, refWave: { samples: so.wave.samples, rms: so.wave.rms, sum: so.wave.sum, peak: so.wave.peak },
+    firstFrameDivergence: frameDiv, codeDiffs: so.frames.map((f, i) => r.audio_codes[i] ? f.filter((c, k) => r.audio_codes[i][k] !== c).length : 12), text: r.text, refText: so.text, wave: ours, refWave: { samples: so.wave.samples, rms: so.wave.rms, sum: so.wave.sum, peak: so.wave.peak },
     seconds: +seconds.toFixed(1), audioSeconds: +(r.audio.length / r.sampling_rate).toFixed(2), firstAudioMs: chunks[0]?.at, chunks };
-  replay.ok = slotDiv < 0 && r.tokens.length === so.tokens.length && frameDiv < 0 && r.audio_codes.length === so.frames.length
-    && ours.samples === so.wave.samples && rel(ours.rms, so.wave.rms) <= 1e-3 && rel(ours.sum, so.wave.sum) <= 1e-3;
+  // Text must match slot for slot. Speech codes may not: WebGPU runs the q4f16 decoder with fp16 activations where the
+  // CPU EP computes many ops in float32, so a near-tie in the depth decoder flips a code, and each frame is fed back, so
+  // every later frame differs (2026-10-30, M4 Pro, onnxruntime-web 1.30.0: frames 0-6 exact, one code off at 7 and 9,
+  // then 3-12 of 12; RMS 3.5% off; Chirag listened and accepted the speech). So: the first FRAME_EXACT frames exact,
+  // the same frame count and length, and the wave's RMS within RMS_TOL of the reference.
+  const FRAME_EXACT = 4, RMS_TOL = 0.1;
+  replay.ok = slotDiv < 0 && r.tokens.length === so.tokens.length && (frameDiv < 0 || frameDiv >= FRAME_EXACT)
+    && r.audio_codes.length === so.frames.length && ours.samples === so.wave.samples && rel(ours.rms, so.wave.rms) <= RMS_TOL;
   log({ replay });
 
   // 2. sampled speech as the product runs it, then an abort from onAudio
