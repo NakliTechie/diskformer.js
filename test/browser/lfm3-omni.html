@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>LFM3-Omni greedy match vs onnxruntime CPU</title>
+<pre id="out">running</pre>
+<script type="module">
+// Token-level gate for engines/lfm3_omni.js on WebGPU: for each case of scripts/lfm3-omni-ref.py's fixture (text,
+// image + text, speech) the engine's prompt ids must equal the reference's, and its first 32 greedy tokens must
+// equal those Liquid's runner produced on onnxruntime's CPU EP with the same graphs. Passes when every case matches;
+// it also prints the encoders' feature checksums beside the reference's, to place a divergence.
+//   node examples/run-demo.mjs test/browser/lfm3-omni.html --models /Volumes/Models2/Models/lfm3/omni-2b-onnx
+// Query: ?base=/models/ (the model folder, repo layout), &ort=1.30.0 (onnxruntime-web version), &transformers=4.3.2.
+// The graphs are fetched over HTTP on every run (no OPFS copy).
+import { Lfm3Omni } from '../../engines/lfm3_omni.js';
+const q = new URLSearchParams(location.search);
+const base = new URL(q.get('base') || '/models/', location.href).href;
+const ortVersion = q.get('ort') || '1.30.0', tfVersion = q.get('transformers') || '4.3.2';
+const log = (s) => { const t = typeof s === 'string' ? s : JSON.stringify(s); document.getElementById('out').textContent += `\n${t}`; window.progressText = t; };
+const sums = (f) => { let s = 0, s2 = 0; for (const x of f) { s += x; s2 += x * x; } return { sum: +s.toFixed(3), sumsq: +s2.toFixed(3) }; };
+try {
+  const refDir = new URL('../refs/lfm3-omni/', import.meta.url);
+  const blob = async (f) => (await fetch(new URL(f, refDir), { cache: 'no-store' })).arrayBuffer();
+  const fx = await (await fetch(new URL('fixture.json', refDir), { cache: 'no-store' })).json();
+  const rgb = new Uint8Array(await blob(fx.image.file));
+  const wave = Float32Array.from(new Int16Array(await blob(fx.speech.file)), (x) => x / 32768);
+  const ort = await import(`https://cdn.jsdelivr.net/npm/onnxruntime-web@${ortVersion}/dist/ort.webgpu.min.mjs`);
+  const transformers = await import(`https://cdn.jsdelivr.net/npm/@huggingface/transformers@${tfVersion}/+esm`);
+  const t0 = performance.now();
+  const m = await Lfm3Omni.load({ baseUrl: base, ort, transformers,
+    onProgress: (e) => log(e.total ? `${e.status} ${e.file} ${(e.loaded / 2 ** 20).toFixed(0)} of ${(e.total / 2 ** 20).toFixed(0)} MiB` : `${e.status} ${e.file || ''}`) });
+  log(`loaded in ${((performance.now() - t0) / 1000).toFixed(1)} s, onnxruntime-web ${ortVersion}`);
+  const rows = [];
+  for (const c of fx.cases) {
+    const messages = c.messages.map((msg) => ({ ...msg, content: msg.content.map((part) => part.type === 'image'
+      ? { type: 'image', image: { data: rgb, width: fx.image.width, height: fx.image.height, channels: 3 } }
+      : part.type === 'audio' ? { type: 'audio', audio: wave } : part) }));
+    const { ids, pics, mels } = await m.prepare(messages, { enable_thinking: c.enable_thinking });
+    const idsMatch = ids.length === c.prompt_ids.length && ids.every((t, i) => t === c.prompt_ids[i]);
+    const side = {}, features = {};
+    if (pics.length) { side.image_features = await m.encodeImages(pics); features.image = { ours: sums(side.image_features), ref: { sum: +c.image_features.sum.toFixed(3), sumsq: +c.image_features.sumsq.toFixed(3) } }; }
+    if (mels.length) { side.audio_features = await m.encodeAudio(mels); features.audio = { ours: sums(side.audio_features), ref: { sum: +c.audio_features.sum.toFixed(3), sumsq: +c.audio_features.sumsq.toFixed(3) } }; }
+    const t1 = performance.now();
+    const gen = await m.greedyIds(ids, side, c.gen.length);
+    const ms = performance.now() - t1;
+    let div = -1;
+    for (let i = 0; i < c.gen.length; i++) if (gen[i] !== c.gen[i]) { div = i; break; }
+    const row = { name: c.name, promptIds: ids.length, idsMatch, match: idsMatch && div < 0, firstDivergence: div, n: c.gen.length, ms: Math.round(ms),
+      text: m.tokenizer.decode(gen, { skip_special_tokens: false }), features };
+    rows.push(row); log(row);
+  }
+  await m.dispose();
+  const matched = rows.filter((r) => r.match).length;
+  window.result = { ok: matched === rows.length, matched, of: rows.length, ort: ortVersion, rows };
+} catch (e) { window.result = { ok: false, error: `${e.code || e.name}: ${e.message}`, stack: e.stack }; }
+log(window.result);
+</script>
