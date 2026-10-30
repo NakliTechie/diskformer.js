@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.13 (2026-10-30)
+- LFM3-Omni: one reply at a time. `generate()` and `greedyIds()` share the decoder's caches and onnxruntime's sessions;
+  two replies overlapping on WebGPU failed ("Failed to download data from buffer") or hung (the NakliOS assistant: a
+  text reply with tools left running, then a speech reply). A call made while another runs now waits its turn.
+- Gate `test/browser/lfm3-omni-overlap.html`: text then speech on one engine, and speech started while text runs; both
+  stream audio, nothing throws or times out.
+
 ## 0.6.12 (2026-10-30)
 - LFM3-Omni-2B speaks: `generate(messages, { output_modalities: ['text', 'audio'], onAudio })` runs Liquid's
   interleaved mode (6 text tokens, 12 speech frames in turn), the depth decoder's MaskGIT (12 codes a frame) and the

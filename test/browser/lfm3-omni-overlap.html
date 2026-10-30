@@ -1,0 +1,51 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>LFM3-Omni: text then speech on one engine</title>
+<pre id="out">running</pre>
+<script type="module">
+// Two replies on one engine: a text reply with tools then a speech reply (awaited), and a speech reply started while
+// a text reply still runs. The engine queues the second (one reply at a time); before 0.6.13 the overlap failed in
+// onnxruntime-web ("Failed to download data from buffer") or hung. Passes when nothing times out or throws and both
+// speech replies stream audio.
+//   node examples/run-demo.mjs test/browser/lfm3-omni-overlap.html --models /Volumes/Models2/Models/lfm3/omni-2b-onnx
+import { Lfm3Omni } from '../../engines/lfm3_omni.js';
+const q = new URLSearchParams(location.search);
+const base = new URL(q.get('base') || '/models/', location.href).href;
+const ortVersion = q.get('ort') || '1.30.0', tfVersion = q.get('transformers') || '4.3.2';
+const log = (s) => { const t = typeof s === 'string' ? s : JSON.stringify(s); document.getElementById('out').textContent += `\n${t}`; window.progressText = t; };
+const withTimeout = (p, s) => Promise.race([p, new Promise((r) => setTimeout(() => r({ timeout: true }), s * 1000))]);
+try {
+  const refDir = new URL('../refs/lfm3-omni/', import.meta.url);
+  const fx = await (await fetch(new URL('fixture.json', refDir), { cache: 'no-store' })).json();
+  const pcm = await (await fetch(new URL(fx.speech.file, refDir), { cache: 'no-store' })).arrayBuffer();
+  const clip = Float32Array.from(new Int16Array(pcm), (x) => x / 32768);
+  const ort = await import(`https://cdn.jsdelivr.net/npm/onnxruntime-web@${ortVersion}/dist/ort.webgpu.min.mjs`);
+  const transformers = await import(`https://cdn.jsdelivr.net/npm/@huggingface/transformers@${tfVersion}/+esm`);
+  const m = await Lfm3Omni.load({ baseUrl: base, ort, transformers, speech: true });
+  log('loaded');
+  const tools = [{ type: 'function', function: { name: 'get_weather', description: 'Current weather for a city', parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] } } }];
+  const msgs = [{ role: 'user', content: [{ type: 'audio', audio: clip }] }];
+  const res = {};
+  // 1. text with tools, awaited, then speech with tools (naklios's report)
+  let t0 = performance.now();
+  const a = await withTimeout(m.generate(msgs, { max_new_tokens: 64, tools }), 120);
+  res.seqText = { ms: Math.round(performance.now() - t0), timeout: !!a.timeout, text: a.text?.slice(0, 80) };
+  t0 = performance.now(); let chunks = 0;
+  const b = await withTimeout(m.generate(msgs, { max_new_tokens: 120, tools, output_modalities: ['text', 'audio'], seed: 1, onAudio: () => chunks++ }), 120);
+  res.seqSpeech = { ms: Math.round(performance.now() - t0), timeout: !!b.timeout, chunks, text: b.text?.slice(0, 80) };
+  log(res);
+  // 2. overlap: a text reply still running when a speech reply starts (a caller that stops reading without aborting)
+  t0 = performance.now(); chunks = 0;
+  const first = m.generate(msgs, { max_new_tokens: 200, tools });
+  await new Promise((r) => setTimeout(r, 300));
+  const c = await withTimeout(m.generate(msgs, { max_new_tokens: 120, tools, output_modalities: ['text', 'audio'], seed: 1, onAudio: () => chunks++ }), 120);
+  res.overlapSpeech = { ms: Math.round(performance.now() - t0), timeout: !!c.timeout, chunks, text: c.text?.slice(0, 80), error: null };
+  const f = await withTimeout(first.catch((e) => ({ error: String(e) })), 60);
+  res.overlapFirst = { timeout: !!f.timeout, error: f.error || null, text: f.text?.slice(0, 80) };
+  const ok = !res.seqText.timeout && !res.seqSpeech.timeout && res.seqSpeech.chunks > 0 && !res.overlapSpeech.timeout && res.overlapSpeech.chunks > 0
+    && !res.overlapFirst.timeout && !res.overlapFirst.error;
+  await m.dispose(); await Lfm3Omni.deleteCache({ baseUrl: base });
+  window.result = { ok, ...res };
+} catch (e) { window.result = { ok: false, error: `${e.code || e.name}: ${e.message}`, stack: e.stack }; }
+log(window.result);
+</script>

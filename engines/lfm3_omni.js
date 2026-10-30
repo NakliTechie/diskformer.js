@@ -710,7 +710,15 @@ export class Lfm3Omni {
   // stopReason 'eos' | 'length' | 'aborted'. Streaming: onText(delta) with each new piece of text (held back while
   // a token ends inside a UTF-8 character), onToken(id), and a transformers.js streamer (put([[id]]), end()). signal
   // (AbortSignal) is read before every decode step; an abort resolves, it does not throw.
-  async generate(messages, opts = {}) {
+  // One reply at a time: generate() and greedyIds() share the decoder's caches and onnxruntime's sessions, and two runs
+  // overlapping on WebGPU fail ("Failed to download data from buffer") or hang (2026-10-30: a caller that stopped
+  // reading a text reply without aborting it, then asked for speech). A call made while another runs waits its turn.
+  #turn = Promise.resolve();
+  #serial(fn) { const run = this.#turn.then(fn); this.#turn = run.catch(() => {}); return run; }
+
+  generate(messages, opts = {}) { return this.#serial(() => this.#generate(messages, opts)); }
+
+  async #generate(messages, opts) {
     const { max_new_tokens = 1024, signal, onText, onToken, streamer, seed, output_modalities = ['text'] } = opts;
     if (output_modalities.includes('audio')) {
       if (!output_modalities.includes('text')) throw new Error("LFM3-Omni speaks in interleaved mode: output_modalities ['text', 'audio']");
@@ -818,7 +826,9 @@ export class Lfm3Omni {
   }
 
   // Greedy ids after prompt ids (the gate's comparison): no template, no stop on EOS unless asked.
-  async greedyIds(ids, side = {}, n = 32, { stopAtEos = true } = {}) {
+  greedyIds(ids, side = {}, n = 32, opts = {}) { return this.#serial(() => this.#greedyIds(ids, side, n, opts)); }
+
+  async #greedyIds(ids, side = {}, n = 32, { stopAtEos = true } = {}) {
     const T = this.tokens, suppress = [T.audio, T.audio_out, T.image, T.video, T.mixed_start, T.audio_start], out = [];
     try {
       let { logits } = await this.prefill(ids, side);
