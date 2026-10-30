@@ -79,6 +79,8 @@ const ev = async (expression) => { const r = await send('Runtime.evaluate', { ex
 
 let url = page ? `http://127.0.0.1:${port}/${page}` : `http://127.0.0.1:${port}/examples/${example}/index.html`, minutes = page ? 30 : 3;
 if (page && models && arg('file')) url += `?url=/models/${encodeURIComponent(arg('file'))}`;
+// --query: extra page parameters, e.g. --query ort=1.31.1
+if (page && arg('query')) url += (url.includes('?') ? '&' : '?') + arg('query');
 // --ref: a path in this repo (test/refs/…) or a file name in --models.
 if (page && models && arg('ref')) url += `&ref=${arg('ref').includes('/') ? '/' + arg('ref') : `/models/${encodeURIComponent(arg('ref'))}`}&engine=${arg('engine', 'gemma')}${arg('root') ? `&root=${arg('root')}` : ''}`;
 if (chat) {
