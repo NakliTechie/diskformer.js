@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.14 (2026-10-30)
 - LFM3-Omni speech out is 3x faster in a background tab. The inverse STFT ran a naive inverse DFT on the main thread
   (15-18 ms of CPU per 80 ms speech frame; 75 ms when the page runs in the background, as a hidden Claude desktop
   browser pane does), so SansadSaar's voice chat got 0.54x real time. It now runs a mixed-radix FFT (1280 = 2^8 * 5):
