@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-const PINNED = { sha256: '4e34e9db029de389d797ce946cec2bc137f9062c236117af57c3912acf316a29', from: 'kohra commit 93101c4 (before the v0.4.0 tag)' };
+const PINNED = { sha256: '4e34e9db029de389d797ce946cec2bc137f9062c236117af57c3912acf316a29', from: 'kohra v0.4.0' };
 const here = new URL('..', import.meta.url).pathname;
 const i = process.argv.indexOf('--kohra');
 const kohra = i > 0 ? process.argv[i + 1] : process.env.KOHRA || join(homedir(), 'Code/kohra');
