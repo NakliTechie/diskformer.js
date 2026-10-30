@@ -478,20 +478,41 @@ export class Istft {
   push(rows) {
     const { N, bins, hop } = this, width = 2 * bins, count = rows.length / width;
     this.#grow((this.rows + count - 1) * hop + N);
-    const re = new Float64Array(bins), im = new Float64Array(bins);
+    const { re, im, xr, xi, tmp } = (this.buf ??= { re: new Float64Array(N), im: new Float64Array(N), xr: new Float64Array(N), xi: new Float64Array(N), tmp: new Float64Array(2 * N) });
     for (let r = 0; r < count; r++) {
       const base = r * width, o = (this.rows + r) * hop;
       for (let k = 0; k < bins; k++) { const m = Math.exp(rows[base + k]), ph = rows[base + bins + k]; re[k] = m * Math.cos(ph); im[k] = m * Math.sin(ph); }
+      // numpy irfft: the imaginary parts of bins 0 and N/2 are dropped; the rest of the spectrum is the conjugate mirror
+      im[0] = 0; im[bins - 1] = 0;
+      for (let k = bins; k < N; k++) { re[k] = re[N - k]; im[k] = -im[N - k]; }
+      this.#ifft(re, im, 0, 1, N, xr, xi, 0, tmp);
       for (let n = 0; n < N; n++) {
-        // numpy irfft: the imaginary parts of bins 0 and N/2 are dropped
-        let x = re[0] + (n & 1 ? -re[bins - 1] : re[bins - 1]);
-        for (let k = 1, a = n; k < bins - 1; k++, a = (a + n) % N) x += 2 * (re[k] * this.cos[a] - im[k] * this.sin[a]);
-        this.wave[o + n] += (x / N) * this.win[n];
+        this.wave[o + n] += (xr[n] / N) * this.win[n];
         this.env[o + n] += this.win[n] * this.win[n];
       }
     }
     this.rows += count;
     return this.#take(this.rows * hop);
+  }
+  // Unnormalised inverse DFT (exp(+2πi·kn/N)) of the n points of (re, im) from `off` every `stride`, into (xr, xi)
+  // from `at`: mixed-radix Cooley-Tukey (n_fft 1280 = 2⁸·5), each level a naive DFT of its smallest prime factor.
+  #ifft(re, im, off, stride, n, xr, xi, at, tmp) {
+    if (n === 1) { xr[at] = re[off]; xi[at] = im[off]; return; }
+    let p = 2; while (n % p) p++;
+    const m = n / p, N = this.N, step = N / n;
+    for (let r = 0; r < p; r++) this.#ifft(re, im, off + r * stride, stride * p, m, xr, xi, at + r * m, tmp);
+    for (let k = 0; k < m; k++) {
+      for (let r = 0; r < p; r++) { tmp[2 * r] = xr[at + r * m + k]; tmp[2 * r + 1] = xi[at + r * m + k]; }
+      for (let q = 0; q < p; q++) {
+        const j = k + q * m;
+        let sr = tmp[0], si = tmp[1];
+        for (let r = 1; r < p; r++) {
+          const a = ((r * j) % n) * step, c = this.cos[a], s = this.sin[a], yr = tmp[2 * r], yi = tmp[2 * r + 1];
+          sr += yr * c - yi * s; si += yr * s + yi * c;
+        }
+        xr[at + j] = sr; xi[at + j] = si;
+      }
+    }
   }
   end() { return this.rows ? this.#take((this.rows - 1) * this.hop + this.N - this.pad) : new Float32Array(0); }
   #take(upTo) {

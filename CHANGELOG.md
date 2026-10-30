@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+- LFM3-Omni speech out is 3x faster in a background tab. The inverse STFT ran a naive inverse DFT on the main thread
+  (15-18 ms of CPU per 80 ms speech frame; 75 ms when the page runs in the background, as a hidden Claude desktop
+  browser pane does), so SansadSaar's voice chat got 0.54x real time. It now runs a mixed-radix FFT (1280 = 2^8 * 5):
+  1.2 ms per frame, output bit-identical to the old one (138,240 of 138,240 samples on 432 random rows). Measured on
+  the M4 Pro, one sampled 13.5 s answer: 1.50-1.61x real time in a hidden browser pane (was 0.54x), 1.71-1.77x
+  visible, 1.41-1.45x in headless Chrome under other CPU load (was 1.30-1.38x). Per frame now: decoder step about
+  20 ms, depth decoder (3 MaskGIT passes) about 20 ms, codec 1 ms, inverse STFT 1.2 ms. No new options; codes and
+  text are unchanged (speech gate: first frame difference at frame 7, as in 0.6.13).
+- `test/browser/lfm3-omni-speed.html`: times each speech stage per frame and reports the real-time factor.
+
 ## 0.6.13 (2026-10-30)
 - LFM3-Omni: one reply at a time. `generate()` and `greedyIds()` share the decoder's caches and onnxruntime's sessions;
   two replies overlapping on WebGPU failed ("Failed to download data from buffer") or hung (the NakliOS assistant: a

@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>LFM3-Omni speech speed</title>
+<pre id="out">running</pre>
+<script type="module">
+// Speed of LFM3-Omni speech out per stage, on the speech gate's s2s case (the fixture's clip in; interleaved text and
+// speech out). Times the decoder step, the depth decoder, the codec and the inverse STFT inside one sampled reply, and
+// reports the real-time factor (seconds of speech per second of wall time from the first decoder step).
+//   node examples/run-demo.mjs test/browser/lfm3-omni-speed.html --models /Volumes/Models2/Models/lfm3/omni-2b-onnx
+// Query: ?base=/models/, &ort=1.30.0, &runs=2, &opts={"…"} (generate() options as JSON). The model's Cache Storage
+// entries are deleted at the end.
+import { Lfm3Omni, Istft } from '../../engines/lfm3_omni.js';
+const q = new URLSearchParams(location.search);
+const base = new URL(q.get('base') || '/models/', location.href).href;
+const ortVersion = q.get('ort') || '1.30.0', runs = Number(q.get('runs') || 2), extra = JSON.parse(q.get('opts') || '{}');
+const log = (s) => { const t = typeof s === 'string' ? s : JSON.stringify(s); document.getElementById('out').textContent += `\n${t}`; window.progressText = t; };
+const time = {};
+const wrap = (obj, name, key) => {
+  const f = obj[name];
+  obj[name] = function (...a) {
+    const t0 = performance.now(), r = f.apply(this, a), add = () => { const s = (time[key] ??= { n: 0, ms: 0 }); s.n++; s.ms += performance.now() - t0; };
+    if (r && typeof r.then === 'function') return r.then((v) => { add(); return v; });
+    add(); return r;
+  };
+};
+try {
+  await Lfm3Omni.deleteCache({ baseUrl: base });
+  const refDir = new URL('../refs/lfm3-omni/', import.meta.url);
+  const fx = await (await fetch(new URL('fixture.json', refDir), { cache: 'no-store' })).json();
+  const pcm = await (await fetch(new URL(fx.speech.file, refDir), { cache: 'no-store' })).arrayBuffer();
+  const clip = Float32Array.from(new Int16Array(pcm), (x) => x / 32768);
+  const ort = await import(`https://cdn.jsdelivr.net/npm/onnxruntime-web@${ortVersion}/dist/ort.webgpu.min.mjs`);
+  const transformers = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.2/+esm');
+  const m = await Lfm3Omni.load({ baseUrl: base, ort, transformers, speech: true, ...extra.load });
+  log('loaded');
+  wrap(m.decoder, 'step', 'decoder');
+  wrap(m, 'depthLogits', 'depth');
+  wrap(m, 'codecRows', 'codec');
+  wrap(Istft.prototype, 'push', 'istft');
+  const messages = [{ role: 'user', content: [{ type: 'audio', audio: clip }] }];
+  const out = [];
+  for (let i = 0; i < runs; i++) {
+    for (const k of Object.keys(time)) delete time[k];
+    let first = null, t0 = performance.now();
+    const r = await m.generate(messages, { output_modalities: ['text', 'audio'], max_new_tokens: 400, seed: 1 + i, ...extra.gen,
+      onAudio: () => { first ??= performance.now() - t0; } });
+    const wall = (performance.now() - t0) / 1000, audio = r.audio.length / r.sampling_rate, frames = r.audio_codes.length;
+    // decode-loop time: from the first step after prefill (the prefill is the first decoder call)
+    const stages = Object.fromEntries(Object.entries(time).map(([k, v]) => [k, { calls: v.n, ms: Math.round(v.ms), msPerFrame: +(v.ms / Math.max(frames, 1)).toFixed(1) }]));
+    out.push({ run: i, frames, textTokens: r.tokens.length - frames, audioSeconds: +audio.toFixed(2), wallSeconds: +wall.toFixed(2), rtf: +(audio / wall).toFixed(3), firstAudioMs: Math.round(first), stages, text: r.text.slice(0, 80) });
+    log(out.at(-1));
+  }
+  await m.dispose();
+  await Lfm3Omni.deleteCache({ baseUrl: base });
+  window.result = { ok: true, runs: out };
+} catch (e) { window.result = { ok: false, error: `${e.code || e.name}: ${e.message}`, stack: e.stack }; }
+log(window.result);
+</script>
