@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.12 (2026-10-30)
+- LFM3-Omni-2B speaks: `generate(messages, { output_modalities: ['text', 'audio'], onAudio })` runs Liquid's
+  interleaved mode (6 text tokens, 12 speech frames in turn), the depth decoder's MaskGIT (12 codes a frame) and the
+  codec decoder, then an inverse STFT to 24 kHz Float32 PCM, streamed about once a second. Options `audio_temperature`
+  (0.4), `audio_top_k`, `audio_repetition_penalty` (1.2), `audio_repetition_window` (64), `audio_chunk_frames`, `seed`;
+  `load({ speech: true })` fetches the two speech graphs (depth_decoder 336 MB, codec_decoder 179 MB, fp32) up front,
+  else the first speech call does. Text-only output is unchanged and stays the default.
+- Gate `test/browser/lfm3-omni-speech.html`: text identical to Liquid's runner slot for slot; speech codes exact for
+  the first frames, then fp16 near-ties on WebGPU flip a code and later frames differ (M4 Pro: frames 0-6 exact), so
+  the gate asks for 4 exact frames, the same length and RMS within 10%; a sampled 13.5 s answer took 9.6 s, first
+  audio after 2.3 s (speech prompt included). The inverse STFT matches numpy to 5e-10 of peak. `--wav` writes the
+  replies for listening.
+
 ## 0.6.11 (2026-10-30)
 - Republishes 0.6.10's tagged files. npm 0.6.10 was packed from a working tree that held uncommitted, unchecked
   speech-output work in `engines/lfm3_omni.js` (854 lines against the tag's 628); 0.6.11 carries the tag's engine.
