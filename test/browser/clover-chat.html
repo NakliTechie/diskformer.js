@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>clover chat</title>
+<pre id="out">running</pre>
+<script type="module">
+// End-to-end check of the clover_moe engine on the full model: kohra's denoise loop (engines/vendor/kohra-denoise.js)
+// through generate(), with Clover's decoding rules, on short prompts. A person reads the replies for coherence.
+//   node examples/run-demo.mjs test/browser/clover-chat.html --models <dir> --file Clover-35B-A3B-Preview-Q4_0.gguf
+// ?budget=GB sets the expert pool (default 1); ?max=N the new tokens per reply (default 96).
+import { CloverMoeSsd } from '../../engines/clover_moe_ssd.js';
+import { storeKey } from '../../src/ingest.js';
+const q = new URLSearchParams(location.search), url = q.get('url');
+const log = (s) => { document.getElementById('out').textContent += `\n${s}`; window.progressText = s; };
+const PROMPTS = [
+  'What is the capital of France? Answer in one sentence.',
+  'Write a Python function that returns the n-th Fibonacci number.',
+];
+try {
+  const m = await CloverMoeSsd.load(null, { url, key: storeKey(url.split('/').pop()), root: 'diskformer-test', poolBytes: Number(q.get('budget') || 1) * 2 ** 30, maxCtx: 1024,
+    onProgress: (e) => { if (e.status === 'weights' && e.total) log(`load ${e.kind || 'ingest'} ${e.loaded} of ${e.total}`); } });
+  const replies = [];
+  for (const p of PROMPTS) {
+    let text = '';
+    for await (const r of m.generate([{ role: 'user', content: p }], { maxNewTokens: Number(q.get('max') || 96), enableThinking: false })) { text = r.text; log(`… ${r.tokens} tokens`); }
+    replies.push({ prompt: p, text, denoise: m.lastDenoise });
+    log(`${p}\n→ ${text}\n${JSON.stringify(m.lastDenoise)}`);
+  }
+  window.result = { ok: true, replies, stats: m.stats() };
+  await m.dispose();
+} catch (e) { window.result = { ok: false, error: `${e.code || e.name}: ${e.message}`, stack: e.stack }; log(window.result.error); }
+</script>

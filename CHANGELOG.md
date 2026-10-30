@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.6.15 (2026-10-30)
+- Clover-35B-A3B-Preview (Diffuspace, Apache-2.0), a block-diffusion model on Qwen3.6-35B-A3B, from the SSD:
+  `engines/clover_moe_ssd.js` (`CloverMoeSsd`, GGUF arch `clover_moe`; pinned to the authors' Q4_0 file, 19.6 GB,
+  `Diffuspace/Clover-35B-A3B-Preview-GGUF` at 32e22a0). The commit pass is Qwen35MoeSsd's chunked prefill. New is the
+  preview (denoising) pass over a 32-token block: the DeltaNet conv also looks right inside the block, the delta rule
+  becomes a softmax over the block's keys plus a "history" slot read from the clean recurrent state, full attention
+  sees the whole block both ways, and one coreset of experts (90% of the block's routing mass) serves the block. A
+  preview writes nothing to the committed cache.
+- `forward({ mode: 'preview' | 'commit', start, ids, wantLogits })` is the callback kohra.js's denoise loop drives;
+  previews return all logits ('all', T x vocab, row t scores slot t) or the GPU top-1 and its confidence ('top1').
+  `generate()` runs the loop with Clover's reference settings (threshold 0.95, its generation config's penalties).
+  kohra's loop is vendored unchanged as `engines/vendor/kohra-denoise.js`; `node scripts/sync-kohra.mjs` checks it.
+- Clover's GGUFs store the DeltaNet decay as `A_log` (Qwen3.6's store -exp(A_log)); the engine converts it at load.
+- `qwen35_moe_ssd.js` and `qwen3_moe_ssd.js` accept the `clover_moe` architecture (`Qwen35MoeSsd.archs`).
+- Gates: `scripts/clover-oracle.py` runs the authors' modeling_clover_moe.py on CPU (float32, weights dequantized from
+  a 4-layer cut made by `scripts/gguf-cut.py`); `test/browser/clover-states.html` replays prompt, preview, commit,
+  preview on the engine; `scripts/clover-check.py` compares. Measured: DeltaNet layers 1-2e-6 relative error,
+  the attention layer 2e-5 (f16 KV), logits 1.7e-4, top-1 identical on 64 of 64 rows ('all' and 'top1'). Full model
+  in Chrome (`test/browser/clover-chat.html`, 1 GB expert pool): "What is the capital of France? Answer in one
+  sentence." gives "The capital of France is Paris." (2 previews); a Fibonacci request gives a coherent start of an
+  iterative implementation (64 tokens, 38 previews). Not benchmarked yet.
+
 ## 0.6.14 (2026-10-30)
 - LFM3-Omni speech out is 3x faster in a background tab. The inverse STFT ran a naive inverse DFT on the main thread
   (15-18 ms of CPU per 80 ms speech frame; 75 ms when the page runs in the background, as a hidden Claude desktop

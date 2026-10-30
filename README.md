@@ -66,7 +66,8 @@ weights in OPFS, read through sync access handles in workers, and moves only wha
 
 The disk tier also stands alone: your engine keeps its own kernels and decides what a step needs. `engines/` is the home of
 LocalMind's hand-written WebGPU engines (since 0.6.0): LFM2 MoE, Hunyuan v3 MoE, Flint, Ling 3.0 Flash, a dense Qwen3.5 layer streamer,
-LFM2.5, Gemma 4 E2B, Ternary Bonsai 2 27B and speculative drafters, each gated in LocalMind; and Gemma 4 26B-A4B, Qwen3.6 35B-A3B and Qwen3-30B-A3B (at
+LFM2.5, Gemma 4 E2B, Ternary Bonsai 2 27B and speculative drafters, each gated in LocalMind; Clover-35B-A3B-Preview, a block-diffusion
+model on Qwen3.6, driven by kohra.js's denoise loop; and Gemma 4 26B-A4B, Qwen3.6 35B-A3B and Qwen3-30B-A3B (at
 [/classic/](https://diskformer.naklitechie.com/classic/); `Gemma4MoeSsd.load(null, { gpuBudgetBytes })`). A budget that
 cannot hold the dense part and two tokens' experts is refused with the numbers. Kernels: gemma4-webgpu (Apache-2.0,
 `engines/NOTICE`). Measured on a MacBook M4 Pro, 24 GB, Chrome 154, 2026-10-05, decode the median of

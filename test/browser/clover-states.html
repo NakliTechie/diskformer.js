@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>clover states</title>
+<pre id="out">running</pre>
+<script type="module">
+// The clover_moe engine's preview and commit passes on a layer cut, for scripts/clover-check.py to compare with the
+// torch oracle (scripts/clover-oracle.py): commit the prompt, preview A, commit block C, preview B (ids from
+// test/refs/clover-oracle-ids.json). Returns each preview's per-layer rows, its logits at every 97th vocabulary id,
+// and each row's top-1 from the 'all' logits and from the GPU 'top1' path.
+//   node examples/run-demo.mjs test/browser/clover-states.html --models <dir> --file clover-4l.gguf
+import { CloverMoeSsd } from '../../engines/clover_moe_ssd.js';
+import { storeKey } from '../../src/ingest.js';
+const url = new URLSearchParams(location.search).get('url');
+const log = (s) => { document.getElementById('out').textContent += `\n${s}`; window.progressText = s; };
+const r7 = (a) => Array.from(a, (v) => +v.toPrecision(7));
+try {
+  const ids = await (await fetch('../refs/clover-oracle-ids.json')).json();
+  const m = await CloverMoeSsd.load(null, { url, key: storeKey(url.split('/').pop()), root: 'diskformer-test', poolBytes: 2 ** 30, maxCtx: 512, capture: true,
+    onProgress: (e) => { if (e.status === 'weights' && e.total) log(`load ${e.kind || 'ingest'} ${e.loaded} of ${e.total}`); } });
+  const V = m.cfg.vocab, out = { ok: true, mask: m.maskId };
+  const top = (lg, t) => { let b = -1, bv = -Infinity; for (let i = 0; i < V; i++) if (i !== m.maskId && lg[t * V + i] > bv) { bv = lg[t * V + i]; b = i; }
+    let s = 0; for (let i = 0; i < V; i++) if (i !== m.maskId) s += Math.exp(lg[t * V + i] - bv); return [b, 1 / s]; };
+  const grab = async (name, block) => {
+    const lg = await m.forward({ mode: 'preview', start: m.position, ids: block, wantLogits: 'all' });
+    const layers = (await m.readCapture()).map(r7);
+    const T = block.length, sub = [], tops = [];
+    for (let t = 0; t < T; t++) { for (let i = 0; i < V; i += 97) sub.push(lg[t * V + i]); tops.push(top(lg, t)); }
+    const f = await m.forward({ mode: 'preview', start: m.position, ids: block, wantLogits: 'top1' });
+    out[name] = { layers, logitsSub: r7(sub), top: tops, top1: { token: Array.from(f.token), conf: r7(f.conf) } };
+    log(`preview ${name}: top ${tops.slice(0, 6).map((x) => x[0])}`);
+  };
+  await m.forward({ mode: 'commit', start: 0, ids: ids.prompt });
+  await grab('A', ids.previewA);
+  const p0 = m.position;
+  await m.forward({ mode: 'commit', start: m.position, ids: ids.commitC });
+  if (m.position !== p0 + 32) throw new Error(`commit moved the cache from ${p0} to ${m.position}`);
+  await grab('B', ids.previewB);
+  out.stats = m.stats();
+  await m.dispose();
+  window.result = out;
+} catch (e) { window.result = { ok: false, error: `${e.code || e.name}: ${e.message}`, stack: e.stack }; log(window.result.error); }
+</script>
