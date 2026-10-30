@@ -32,6 +32,10 @@
  * (MaskGIT, 12 codes per frame) reads, and takes `audio_out_codes`, the codes of the frame fed back as <|audio_out|>;
  * output_modalities: ['text', 'audio'] will switch generate() to lfm3_audio's TEXT / AUDIO / INTERLEAVED machine.
  *
+ * Model files go to Cache Storage ('diskformer-models', keyed by URL) on the first load and come from there later;
+ * load({ force: true }) downloads again, Lfm3Omni.deleteCache({ baseUrl }) removes this model's entries by name.
+ * Audio parts are capped at MAX_AUDIO_SECONDS (30 s) per clip.
+ *
  * The decoder sits behind Lfm3DecoderStep (step(ids, side) → { logits, hidden }, reset(), dispose()), so a WGSL
  * decoder can replace the ORT one while the encoders stay on ORT.
  */
@@ -63,6 +67,12 @@ export function melFrames(samples, mel = MEL) {
   return 1 + Math.floor((padded - mel.n_fft) / mel.hop_length);
 }
 export const speechTokens = (frames, mel = MEL) => Math.ceil(frames / mel.encoder_stride);
+// Longest speech clip per audio part, in seconds (the NakliOS assistant's turn limit)
+export const MAX_AUDIO_SECONDS = 30;
+export function checkAudio(wave, index = 0, maxSeconds = MAX_AUDIO_SECONDS, rate = MEL.sampling_rate) {
+  if (!(wave instanceof Float32Array)) throw new TypeError(`audio ${index}: expected a Float32Array of 16 kHz mono samples`);
+  if (wave.length > maxSeconds * rate) throw new RangeError(`audio ${index} is ${(wave.length / rate).toFixed(1)} s long; the limit is ${maxSeconds} s per clip`);
+}
 
 // [n_fft/2 + 1][num_mel_bins] as a flat Float32Array (bin-major): transformers.audio_utils.mel_filter_bank with the
 // slaney scale and norm from 0 to sampling_rate / 2, rounded to float32 as the Python side does.
@@ -350,34 +360,70 @@ async function createSession(ort, { model, data, dataPath }, { device = 'webgpu'
   });
 }
 
+// ── Model files: Cache Storage (as kohra's fetchCached) ─────────────────────────────────────────────────────────────
+// One Cache Storage cache for diskformer's ONNX engines; each entry is keyed by its file URL, so deleteCache() can
+// remove one model's entries by name. (GGUF engines keep their weights in OPFS stores instead: src/ingest.js.)
+export const CACHE_NAME = 'diskformer-models';
+
+// Bytes of url: a Cache Storage hit is read from disk; a miss is downloaded once, its stream split between the cache
+// (written to disk as it arrives) and one buffer here, so a 1.4 GB file is never held twice by this module. A
+// failed put (quota) still returns the bytes; the next load downloads again. force: skip the stored copy and replace
+// it. onProgress({ status: 'download' | 'cache', loaded, total }); fetchImpl for tests.
+export async function fetchCached(url, { cache = null, force = false, onProgress = () => {}, fetchImpl = fetch } = {}) {
+  let res = cache && !force ? await cache.match(url) : null;
+  const hit = !!res;
+  if (!res) {
+    res = await fetchImpl(url);
+    if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+  }
+  const status = hit ? 'cache' : 'download';
+  const total = Number(res.headers.get('content-length')) || 0;
+  let body = res.body, stored = null;
+  if (cache && !hit && body) {
+    const [mine, theirs] = body.tee();
+    body = mine;
+    stored = cache.put(url, new Response(theirs, total ? { headers: { 'content-length': String(total) } } : {})).catch(() => {});
+  }
+  if (!body) { const b = new Uint8Array(await res.arrayBuffer()); onProgress({ status, loaded: b.length, total: b.length }); return b; }
+  // straight into one buffer of the announced size; chunks only when the size is unknown or the body runs past it
+  // (a compressed response announces the compressed length)
+  const bytes = new Uint8Array(total), chunks = [], reader = body.getReader();
+  let loaded = 0, filled = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!chunks.length && filled + value.length <= total) { bytes.set(value, filled); filled += value.length; } else chunks.push(value);
+    loaded += value.length;
+    onProgress({ status, loaded, total: Math.max(total, loaded) });
+  }
+  await stored;
+  if (hit && total && loaded !== total) {        // a stored copy cut short: drop it and download again
+    await cache.delete(url);
+    return fetchCached(url, { cache, force: true, onProgress, fetchImpl });
+  }
+  if (!chunks.length && filled === total) return bytes;
+  const out = new Uint8Array(loaded);
+  out.set(bytes.subarray(0, filled)); let o = filled;
+  for (const c of chunks) { out.set(c, o); o += c.length; }
+  return out;
+}
+
 // ── The engine ────────────────────────────────────────────────────────────────────────────────────────────────────
 export class Lfm3Omni {
   // opts: baseUrl (the repo layout) or files { 'onnx/decoder_q4f16.onnx': URL | Blob | ArrayBuffer | Uint8Array, … };
   // ort (onnxruntime-web/webgpu module), transformers (for PreTrainedTokenizer) or tokenizer; device 'webgpu';
-  // onProgress({ status, file, loaded, total }) with byte counts while a file downloads
+  // onProgress({ status: 'download' | 'cache', file, loaded, total }) while a file arrives, then 'session' per graph;
+  // cacheName (CACHE_NAME; null: no Cache Storage) and force (download again, replacing the stored copies)
   static async load(opts = {}) {
-    const { baseUrl = LFM3_OMNI_2B.baseUrl, files = {}, device = 'webgpu', onProgress = () => {} } = opts;
+    const { baseUrl = LFM3_OMNI_2B.baseUrl, files = {}, device = 'webgpu', onProgress = () => {}, cacheName = CACHE_NAME, force = false } = opts;
     const src = (name) => files[name] ?? new URL(name, baseUrl.endsWith('/') ? baseUrl : baseUrl + '/').href;
+    const cache = cacheName && globalThis.caches ? await caches.open(cacheName) : null;
     const bytes = async (name) => {
       const s = src(name);
       if (s instanceof Uint8Array) return s;
       if (s instanceof ArrayBuffer) return new Uint8Array(s);
       if (s instanceof Blob) return new Uint8Array(await s.arrayBuffer());
-      const r = await fetch(s);
-      if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`);
-      const total = Number(r.headers.get('content-length')) || 0;
-      if (!r.body || !total) return new Uint8Array(await r.arrayBuffer());
-      // one buffer of the announced size, filled as the stream arrives
-      const out = new Uint8Array(total), reader = r.body.getReader();
-      let loaded = 0;
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        out.set(value, loaded); loaded += value.length;
-        onProgress({ status: 'download', file: name, loaded, total });
-      }
-      if (loaded !== total) throw new Error(`${name}: ${loaded} of ${total} bytes`);
-      return out;
+      return fetchCached(s, { cache, force, onProgress: (e) => onProgress({ ...e, file: name }) });
     };
     const json = async (name) => JSON.parse(new TextDecoder().decode(await bytes(name)));
     const text = async (name) => new TextDecoder().decode(await bytes(name));
@@ -393,7 +439,8 @@ export class Lfm3Omni {
       tokenizer = new tf.PreTrainedTokenizer(tj, { ...tc, chat_template: tc.chat_template ?? tpl });
     }
     const ort = opts.ort ?? (await import(ORT_WEB_URL));
-    // the graph and its external data, both read here (byte progress); the session is built from the bytes
+    // the graph and its external data, both read here (byte progress); the session is built from the bytes, which
+    // are dropped once onnxruntime holds the weights
     const graph = async (role) => {
       const file = LFM3_OMNI_2B.graphs[role];
       const model = await bytes(file), data = await bytes(file + '_data');
@@ -406,6 +453,28 @@ export class Lfm3Omni {
     const decoder = await OrtLfm3Decoder.create(ort, await graph('decoder'), sessionOpts, config.text_config);
     onProgress({ status: 'ready' });
     return new Lfm3Omni({ ort, tokenizer, config, gen, processor, vision, audio, decoder });
+  }
+
+  // Every file load() reads, relative to baseUrl
+  static files() {
+    return [...LFM3_OMNI_2B.json, 'chat_template.jinja', ...Object.values(LFM3_OMNI_2B.graphs).flatMap((g) => [g, g + '_data'])];
+  }
+  // Stored copies of this model's files under baseUrl: [{ file, url, bytes }] (bytes from the stored length)
+  static async cached({ baseUrl = LFM3_OMNI_2B.baseUrl, cacheName = CACHE_NAME } = {}) {
+    if (!globalThis.caches) return [];
+    const cache = await caches.open(cacheName), out = [];
+    for (const file of Lfm3Omni.files()) {
+      const url = new URL(file, baseUrl.endsWith('/') ? baseUrl : baseUrl + '/').href, r = await cache.match(url);
+      if (r) out.push({ file, url, bytes: Number(r.headers.get('content-length')) || null });
+    }
+    return out;
+  }
+  // Deletes this model's stored files by name (other entries in the cache stay); resolves to the files deleted
+  static async deleteCache({ baseUrl = LFM3_OMNI_2B.baseUrl, cacheName = CACHE_NAME } = {}) {
+    if (!globalThis.caches) return [];
+    const cache = await caches.open(cacheName), gone = [];
+    for (const { file, url } of await Lfm3Omni.cached({ baseUrl, cacheName })) if (await cache.delete(url)) gone.push(file);
+    return gone;
   }
 
   constructor({ ort, tokenizer, config, gen, processor, vision, audio, decoder }) {
@@ -431,8 +500,9 @@ export class Lfm3Omni {
   }
 
   // The chat template's text and ids (placeholders expanded) of messages; media come back for the encoders.
-  async prepare(messages, { images = [], audios = [], enable_thinking = false, tools, add_generation_prompt = true } = {}) {
+  async prepare(messages, { images = [], audios = [], enable_thinking = false, tools, add_generation_prompt = true, max_audio_seconds = MAX_AUDIO_SECONDS } = {}) {
     const m = splitMedia(messages, images, audios);
+    m.audios.forEach((wave, i) => checkAudio(wave, i, max_audio_seconds, this.mel.sampling_rate));
     const prompt = this.tokenizer.apply_chat_template(m.messages, { tokenize: false, add_generation_prompt, enable_thinking, ...(tools ? { tools } : {}) });
     let ids = Array.from(this.tokenizer.encode(prompt, { add_special_tokens: false }), Number);
     const pics = [];

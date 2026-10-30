@@ -6,10 +6,11 @@
 // Token-level gate for engines/lfm3_omni.js on WebGPU: for each case of scripts/lfm3-omni-ref.py's fixture (text,
 // image + text, speech) the engine's prompt ids must equal the reference's, and its first 32 greedy tokens must
 // equal those Liquid's runner produced on onnxruntime's CPU EP with the same graphs. Passes when every case matches;
-// it also prints the encoders' feature checksums beside the reference's, to place a divergence.
+// it also prints the encoders' feature checksums beside the reference's, to place a divergence. Then a second load
+// must read every model file from Cache Storage (zero requests to the model folder; its time is reported), and the
+// test deletes this model's cache entries by name.
 //   node examples/run-demo.mjs test/browser/lfm3-omni.html --models /Volumes/Models2/Models/lfm3/omni-2b-onnx
 // Query: ?base=/models/ (the model folder, repo layout), &ort=1.30.0 (onnxruntime-web version), &transformers=4.3.2.
-// The graphs are fetched over HTTP on every run (no OPFS copy).
 import { Lfm3Omni } from '../../engines/lfm3_omni.js';
 const q = new URLSearchParams(location.search);
 const base = new URL(q.get('base') || '/models/', location.href).href;
@@ -17,6 +18,8 @@ const ortVersion = q.get('ort') || '1.30.0', tfVersion = q.get('transformers') |
 const log = (s) => { const t = typeof s === 'string' ? s : JSON.stringify(s); document.getElementById('out').textContent += `\n${t}`; window.progressText = t; };
 const sums = (f) => { let s = 0, s2 = 0; for (const x of f) { s += x; s2 += x * x; } return { sum: +s.toFixed(3), sumsq: +s2.toFixed(3) }; };
 try {
+  // a fresh gate starts from an empty cache, so the first load downloads (stale entries from an earlier run go first)
+  await Lfm3Omni.deleteCache({ baseUrl: base });
   const refDir = new URL('../refs/lfm3-omni/', import.meta.url);
   const blob = async (f) => (await fetch(new URL(f, refDir), { cache: 'no-store' })).arrayBuffer();
   const fx = await (await fetch(new URL('fixture.json', refDir), { cache: 'no-store' })).json();
@@ -49,7 +52,27 @@ try {
   }
   await m.dispose();
   const matched = rows.filter((r) => r.match).length;
-  window.result = { ok: matched === rows.length, matched, of: rows.length, ort: ortVersion, rows };
+
+  // Second load in the same page: every model file must come from Cache Storage (no request to the model folder),
+  // and the text case must still match. Then this model's entries are deleted by name, which leaves none stored.
+  const stored = await Lfm3Omni.cached({ baseUrl: base });
+  performance.setResourceTimingBufferSize(10000);
+  performance.clearResourceTimings();
+  const t2 = performance.now();
+  const sources = {};
+  const m2 = await Lfm3Omni.load({ baseUrl: base, ort, transformers, onProgress: (e) => { if (e.file && e.status !== 'session') sources[e.file] = e.status; } });
+  const reloadS = +((performance.now() - t2) / 1000).toFixed(1);
+  const requests = performance.getEntriesByType('resource').filter((r) => r.name.startsWith(base));
+  const c0 = fx.cases[0], again = await m2.greedyIds((await m2.prepare(c0.messages, { enable_thinking: c0.enable_thinking })).ids, {}, c0.gen.length);
+  await m2.dispose();
+  const deleted = await Lfm3Omni.deleteCache({ baseUrl: base }), left = await Lfm3Omni.cached({ baseUrl: base });
+  const fromNetwork = Object.entries(sources).filter(([, v]) => v !== 'cache').map(([k]) => k);
+  const reload = { seconds: reloadS, storedFiles: stored.length, storedBytes: stored.reduce((a, x) => a + (x.bytes || 0), 0), files: Lfm3Omni.files().length,
+    requests: requests.length, networkBytes: requests.reduce((a, r) => a + (r.transferSize || 0), 0), fromNetwork,
+    textMatch: again.every((t, i) => t === c0.gen[i]) && again.length === c0.gen.length, deleted: deleted.length, left: left.length };
+  reload.ok = reload.storedFiles === reload.files && reload.requests === 0 && fromNetwork.length === 0 && reload.textMatch && reload.left === 0;
+  log({ reload });
+  window.result = { ok: matched === rows.length && reload.ok, matched, of: rows.length, ort: ortVersion, rows, reload };
 } catch (e) { window.result = { ok: false, error: `${e.code || e.name}: ${e.message}`, stack: e.stack }; }
 log(window.result);
 </script>
