@@ -11,7 +11,7 @@
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { createReadStream, realpathSync } from 'node:fs';
-import { readFile, stat, realpath, mkdtemp } from 'node:fs/promises';
+import { readFile, stat, realpath, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir, homedir } from 'node:os';
 import { join, extname, normalize, sep } from 'node:path';
 
@@ -80,6 +80,7 @@ const ev = async (expression) => { const r = await send('Runtime.evaluate', { ex
 let url = page ? `http://127.0.0.1:${port}/${page}` : `http://127.0.0.1:${port}/examples/${example}/index.html`, minutes = page ? 30 : 3;
 if (page && models && arg('file')) url += `?url=/models/${encodeURIComponent(arg('file'))}`;
 // --query: extra page parameters, e.g. --query ort=1.31.1
+// --wav <prefix>: a page's window.wavs ({ name: base64 WAV }) are written to <prefix>-<name>.wav when it finishes
 if (page && arg('query')) url += (url.includes('?') ? '&' : '?') + arg('query');
 // --ref: a path in this repo (test/refs/…) or a file name in --models.
 if (page && models && arg('ref')) url += `&ref=${arg('ref').includes('/') ? '/' + arg('ref') : `/models/${encodeURIComponent(arg('ref'))}`}&engine=${arg('engine', 'gemma')}${arg('root') ? `&root=${arg('root')}` : ''}`;
@@ -96,7 +97,13 @@ await send('Page.navigate', { url });
 let last = '', lastAt = 0;
 for (const t0 = Date.now(); Date.now() - t0 < minutes * 60e3; await sleep(1000)) {
   const v = await ev('window.result || null');
-  if (v) { console.log(JSON.stringify(v, null, 1)); stop(v.ok ? 0 : 1); }
+  if (v) {
+    console.log(JSON.stringify(v, null, 1));
+    if (arg('wav')) for (const [name, b64] of Object.entries((await ev('window.wavs || {}')) || {})) {
+      await writeFile(`${arg('wav')}-${name}.wav`, Buffer.from(b64, 'base64')); console.error(`wrote ${arg('wav')}-${name}.wav`);
+    }
+    stop(v.ok ? 0 : 1);
+  }
   const p = await ev('window.progressText || ""');            // a new step at once, the same step every 30 s
   if (p && p !== last && (p.slice(0, 24) !== last.slice(0, 24) || Date.now() - lastAt > 30e3)) { console.error(`${new Date().toTimeString().slice(0, 8)} ${p}`); last = p; lastAt = Date.now(); }
 }
