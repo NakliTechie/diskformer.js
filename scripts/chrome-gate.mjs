@@ -3,9 +3,10 @@
 // (examples/chat/refs/*.json) with paged experts, and reports how many match. Each run uses a new Chrome profile that
 // is deleted when Chrome exits (Chrome holds the OPFS file until then, so removing it from a page fails), unless
 // --profile names one to keep.
-//   node scripts/chrome-gate.mjs <file.gguf> <refs.json> --models <dir> [--slots 8 | --budget GB] [--draft <drafter.gguf>] [--lora <adapter.gguf> [--lora-scale 1]] [--extra <side file,…>] [--dist <dir>] [--env K=V,…] [--log chrome.log] [--profile dir] [--keep] [--out x.json]
+//   node scripts/chrome-gate.mjs <file.gguf> <refs.json> --models <dir> [--slots 8 | --budget GB] [--draft <drafter.gguf>] [--lora <adapter.gguf> [--lora-scale 1]] [--extra <side file,…>] [--dist <dir>] [--env K=V,…] [--no-think] [--log chrome.log] [--profile dir] [--keep] [--out x.json]
 // --draft: a drafter GGUF in --models for speculative decoding (DFlash, DSpark, MTP); replies must stay identical.
 // --lora: a LoRA adapter GGUF in --models, applied at --lora-scale (default 1) as llama-server --lora does.
+// --no-think: chat each conversation with reasoning off; passes when every reply has text and no <think> tags.
 // --extra: side files in --models that the model opens beside the GGUF (DeepSeek-V4.1's Engram file).
 // --dist: serve ggml/dist/ from this folder instead, to gate a browser build of another fork branch.
 import { spawn } from 'node:child_process';
@@ -86,7 +87,7 @@ const sizes = await Promise.all(parts.map(async (f) => (await stat(join(models, 
 // --budget <GB> plans slots (and the batch size) from a GPU budget, as the demo page does; else --slots, default 8
 const sizing = arg('budget') ? { budget: arg('budget') } : { slots: arg('slots', '8') };
 // --env NAME=value,NAME=value: driver settings (DF_UBATCH, DF_OUTPUT_CPU, …), as gate.html takes them
-const q = new URLSearchParams({ model: file, refs: '/' + refs.replace(/^\//, ''), ...sizing, url: parts.map((f) => `/models/${f}`).join(','), size: sizes.join(','), ...(arg('env') ? { env: arg('env') } : {}), ...(arg('draft') ? { draft_url: `/models/${arg('draft')}`, draft_size: String((await stat(join(models, arg('draft')))).size) } : {}),
+const q = new URLSearchParams({ model: file, refs: '/' + refs.replace(/^\//, ''), ...sizing, url: parts.map((f) => `/models/${f}`).join(','), size: sizes.join(','), ...(arg('env') ? { env: arg('env') } : {}), ...(process.argv.includes('--no-think') ? { thinking: '0' } : {}), ...(arg('draft') ? { draft_url: `/models/${arg('draft')}`, draft_size: String((await stat(join(models, arg('draft')))).size) } : {}),
   ...(arg('lora') ? { lora_url: `/models/${arg('lora')}`, lora_size: String((await stat(join(models, arg('lora')))).size), ...(arg('lora-scale') ? { lora_scale: arg('lora-scale') } : {}) } : {}),
   ...(arg('extra') ? { extra_url: arg('extra').split(',').map((f) => `/models/${f}`).join(','), extra_size: (await Promise.all(arg('extra').split(',').map(async (f) => (await stat(join(models, f))).size))).join(',') } : {}) });
 await send('Page.navigate', { url: `http://127.0.0.1:${port}/ggml/gate.html?${q}` });

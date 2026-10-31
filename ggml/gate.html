@@ -73,6 +73,16 @@
   const results = [];
   const only = q.get('only');
   for (const c of refs.conversations.filter((c) => !only || only.split(',').includes(c.name))) {
+    // thinking=0: the conversation through the chat template with reasoning off; a reply passes when it has text and
+    // no thought-block tags (no llama.cpp text to compare with, since llama-server renders these templates the same)
+    if (q.get('thinking') === '0') {
+      worker.postMessage({ type: 'chat', messages: c.messages, n: c.tokens, thinking: false });
+      const r = await next();
+      const ok = r.text.trim().length > 0 && !/<\/?think>/.test(r.text);
+      results.push({ name: c.name, ok, text: r.text, stats: r.stats });
+      say(`${ok ? 'OK  ' : 'BAD '} ${c.name.padEnd(22)} ${JSON.stringify(r.text.slice(0, 80))}`);
+      continue;
+    }
     const want = expected(c.prompt, c.content);
     worker.postMessage({ type: 'complete', prompt: c.prompt, n: c.tokens });
     const r = await next();

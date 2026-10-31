@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.18 (2026-10-31)
+- Reasoning off now holds for templates that always open a thought block. LFM2.5-24B-A2B's template ends the
+  generation prompt with `<think>` and ignores `enable_thinking`, so `llama.chat(messages, { thinking: false })` still
+  returned reasoning and a `</think>` tag. With reasoning off, the driver now closes that block empty (`\n</think>\n\n`,
+  the form Qwen3's and Gemma 4's templates render) and bans the `<think>` token for the reply (logit bias -inf),
+  because with the empty block alone the model opened a new one in 1 of 9 gate conversations. Reasoning on is
+  unchanged: the same prompt, and no bias.
+- `scripts/chrome-gate.mjs --no-think`: each conversation through the chat template with reasoning off; a reply passes
+  with text and no `<think>` tags. LFM2.5-24B-A2B in Chrome (4 GB budget): 9/9 with the Pi adapter, 9/9 without;
+  reasoning on with the adapter 8/9 against llama.cpp, as in 0.6.17.
+
 ## 0.6.17 (2026-10-31)
 - LoRA adapters on the llama.cpp path: `Llama.load({ name, lora, loraScale })` applies a LoRA GGUF stored in OPFS
   beside the model (`df_set_lora` in `ggml/driver.cpp`, llama.cpp's `llama_adapter_lora_init`, as `llama-server

@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <clocale>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <stdexcept>
@@ -541,6 +542,10 @@ static std::vector<llama_token> df_tokenize_prompt(const common_chat_prompt & pr
     return tokens;
 }
 
+// Tokens the next reply may not produce (logit bias -inf), set per reply: with reasoning off, the thought-opening token,
+// so a model whose template always reasons (LFM2.5) cannot open a new block after the empty one.
+static std::vector<llama_logit_bias> g_banned;
+
 // The same reply through llama.cpp's speculative loop (examples/speculative-simple): the drafter proposes up to its
 // block, the target verifies id_last plus the draft in one batch, the greedy sampler keeps the agreeing prefix; a
 // context that cannot drop part of a sequence restores a checkpoint instead. Stats add drafted and accepted counts.
@@ -558,7 +563,9 @@ static const char * df_complete_tokens_spec(std::vector<llama_token> tokens, int
     const bool ckpt_tgt = common_context_can_seq_rm(g_ctx) == COMMON_CONTEXT_SEQ_RM_TYPE_FULL;
     const bool ckpt_dft = common_context_can_seq_rm(ctx_dft) == COMMON_CONTEXT_SEQ_RM_TYPE_FULL;
 
-    common_sampler_ptr smpl(common_sampler_init(g_model, g_spec_params.sampling));
+    common_params_sampling sparams = g_spec_params.sampling;
+    sparams.logit_bias.insert(sparams.logit_bias.end(), g_banned.begin(), g_banned.end());
+    common_sampler_ptr smpl(common_sampler_init(g_model, sparams));
     common_batch       batch(g_ctx);
     const int64_t      t0 = ggml_time_us();
     int64_t            t_first = t0;
@@ -701,6 +708,9 @@ static const char * df_complete_tokens(std::vector<llama_token> tokens, int n_pr
     llama_memory_clear(llama_get_memory(g_ctx), true);
 
     llama_sampler * smpl  = llama_sampler_chain_init(llama_sampler_chain_default_params());
+    if (!g_banned.empty()) {
+        llama_sampler_chain_add(smpl, llama_sampler_init_logit_bias(llama_vocab_n_tokens(vocab), (int32_t) g_banned.size(), g_banned.data()));
+    }
     llama_sampler_chain_add(smpl, llama_sampler_init_greedy());
     llama_batch_ext * batch = llama_batch_ext_init(g_ctx);
 
@@ -779,19 +789,38 @@ static const char * df_complete_tokens(std::vector<llama_token> tokens, int n_pr
 
 // One user turn through the model's chat template (jinja), greedy.
 // The chat template applied to `inputs`, then a greedy reply; a template that fails reports why instead of throwing.
+// With reasoning off, a template that opens a thought block whatever enable_thinking says (LFM2 / LFM2.5 end the
+// generation prompt with "<think>") gets it closed empty, as Qwen3's and Gemma 4's templates render reasoning off.
 static const char * df_complete_chat(const common_chat_templates_inputs & inputs, int n_predict) {
     std::vector<llama_token> tokens;
     try {
         if (!g_tmpls) {
             throw std::runtime_error("no chat template (it failed to load)");
         }
-        tokens = df_tokenize_prompt(common_chat_templates_apply(g_tmpls.get(), inputs).prompt);
+        common_chat_prompt prompt = common_chat_templates_apply(g_tmpls.get(), inputs).prompt;
+        if (!inputs.enable_thinking && !prompt.parts.empty() && !prompt.parts.back().is_input) {
+            std::string & last = prompt.parts.back().text;
+            const size_t  end  = last.find_last_not_of(" \t\n");
+            if (end != std::string::npos && end + 1 >= 7 && last.compare(end + 1 - 7, 7, "<think>") == 0) {
+                last.erase(end + 1);
+                last += "\n</think>\n\n";
+                // the empty block alone is not enough: LFM2.5 still opened a new one (1 of 9 gate conversations)
+                const auto open = common_tokenize(g_ctx, "<think>", false, true);
+                if (open.size() == 1) {
+                    g_banned.push_back({ open[0], -INFINITY });
+                }
+            }
+        }
+        tokens = df_tokenize_prompt(prompt);
     } catch (const std::exception & e) {
         fprintf(stderr, "df_chat: chat template failed: %s\n", e.what());
         g_out = std::string("[chat template failed: ") + e.what() + "]";
+        g_banned.clear();
         return g_out.c_str();
     }
-    return df_complete_tokens(std::move(tokens), n_predict);
+    const char * out = df_complete_tokens(std::move(tokens), n_predict);
+    g_banned.clear();
+    return out;
 }
 
 extern "C" EMSCRIPTEN_KEEPALIVE const char * df_chat(const char * user, int n_predict) {
