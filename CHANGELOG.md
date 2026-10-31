@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.19 (2026-10-31)
 - Run-time LoRA in the native LFM2.5 engine: `await engine.loadAdapter(url | Blob | bytes, { scale })` reads a LoRA
   GGUF (llama.cpp's format: `W.lora_a` / `W.lora_b`, F16) onto the GPU, and `await engine.setAdapter(adapter | null)`
   switches it on or off between turns, with no reload and one base download for every adapter. Each adapted matmul
@@ -14,6 +14,8 @@
 - Demo page `examples/lora/` (site: `/lora/`): LFM2.5-24B-A2B with harness-hub's Pi adapter, a Plain / Pi switch and
   "Ask both, side by side". Headless check (`?auto=1`): switch 0.2 ms; plain, Pi, plain again give 256 tokens each at
   11.2, 10.9 and 11.5 tok/s; the second plain reply is identical to the first. `scripts/build-space.mjs` adds it.
+- `engines/ternary_bonsai_2_mtp.js`: per-model MTP heads (Bonsai 2 27B and 4B); the head kernels take the query-head
+  count (commit caf691c, from another session; its own checks are not part of this release's gates).
 
 ## 0.6.18 (2026-10-31)
 - Reasoning off now holds for templates that always open a thought block. LFM2.5-24B-A2B's template ends the
