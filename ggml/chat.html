@@ -78,6 +78,8 @@
         browser's private storage on your disk (OPFS). llama.cpp's WebGPU backend keeps the dense layers and a small
         cache of experts on the GPU; diskformer reads every other expert from the file as each token needs it.</p>
       <p>Pick a model on the right. The first time, it downloads once into this browser's storage.</p>
+      <p>New in 0.6.20: <a href="lora/">switch a LoRA adapter on and off at run time</a>, with no reload. The demo runs
+        LFM2.5-24B-A2B with harness-hub's Pi coding adapter (37.4 MB).</p>
     </div></div>
     <form id="ask">
       <textarea id="q" rows="2" placeholder="Load a model to start"></textarea>
@@ -119,7 +121,8 @@
       <a href="https://github.com/ggml-org/llama.cpp">llama.cpp</a>'s WebGPU backend, with expert paging from the
       <a href="https://github.com/NakliTechie/llama.cpp/tree/webgpu-diskformer">webgpu-diskformer</a> branch.
       Each model is downloaded from Hugging Face under its own license.
-      The earlier hand-written engines: <a href="classic/index.html">classic page</a>.</footer>
+      The earlier hand-written engines: <a href="classic/index.html">classic page</a>. Run-time LoRA:
+      <a href="lora/">adapter switch</a>.</footer>
   </aside>
 </div>
 
