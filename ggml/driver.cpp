@@ -223,6 +223,18 @@ static const int32_t                      DF_DRAFT_N_MAX = 3;
 
 extern "C" EMSCRIPTEN_KEEPALIVE void df_set_draft(const char * path) { g_draft_path = path ? path : ""; }
 
+// A LoRA adapter GGUF (llama.cpp's convert_lora_to_gguf.py output). df_set_lora names it and its scale before df_load;
+// df_load loads it beside the model (llama_adapter_lora_init) and sets it on the context, as llama-server --lora does.
+// Its tensors sit next to the base tensors they change, so an adapter on the dense layers leaves expert paging alone.
+static std::string          g_lora_path;
+static float                g_lora_scale = 1.0f;
+static llama_adapter_lora * g_lora       = nullptr;
+
+extern "C" EMSCRIPTEN_KEEPALIVE void df_set_lora(const char * path, double scale) {
+    g_lora_path  = path ? path : "";
+    g_lora_scale = (float) scale;
+}
+
 typedef ggml_backend_buffer_type_t (*df_paged_buft_fn)(ggml_backend_dev_t, uint32_t, const ggml_webgpu_page_source *);
 
 // A WebGPU_Paged buffer type with n_slots experts per tensor on the GPU, reading from the GGUF source.
@@ -366,16 +378,19 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char * df_plan(const char * path, double b
     }
     llama_model_free(model);
     g_ubatch = ubatch;
-    // a drafter (df_set_draft) sits on the GPU beside the target: count its weights (its small KV and compute are in
-    // the reserve's margin)
-    if (!g_draft_path.empty()) {
-        if (gguf_context * g = gguf_init_from_file(g_draft_path.c_str(), gp)) {
-            size_t draft_bytes = 0;
+    // a drafter (df_set_draft) and a LoRA adapter (df_set_lora) sit on the GPU beside the target: count their weights
+    // (a drafter's small KV and compute are in the reserve's margin)
+    for (const std::string & side : { g_draft_path, g_lora_path }) {
+        if (side.empty()) {
+            continue;
+        }
+        if (gguf_context * g = gguf_init_from_file(side.c_str(), gp)) {
+            size_t side_bytes = 0;
             for (int64_t i = 0; i < gguf_get_n_tensors(g); i++) {
-                draft_bytes += gguf_get_tensor_size(g, i);
+                side_bytes += gguf_get_tensor_size(g, i);
             }
             gguf_free(g);
-            dense += draft_bytes;
+            dense += side_bytes;
             const double room = budget - (double) (dense + kv + compute + reserve);
             slots = dense_only ? (room >= 0 ? 0 : -1) : (room > 0 ? std::min<long>((long) (room / per_slot), n_expert) : 0);
         }
@@ -471,6 +486,13 @@ extern "C" EMSCRIPTEN_KEEPALIVE int df_load(const char * path, int n_slots, int 
     g_ctx                   = llama_init_from_model(g_model, cp);
     if (g_ctx == nullptr) {
         return 3;
+    }
+    if (!g_lora_path.empty()) {
+        g_lora = llama_adapter_lora_init(g_model, g_lora_path.c_str());
+        if (g_lora == nullptr || llama_set_adapters_lora(g_ctx, &g_lora, 1, &g_lora_scale) != 0) {
+            fprintf(stderr, "df_load: cannot apply the LoRA adapter %s\n", g_lora_path.c_str());
+            return 7;
+        }
     }
     if (!g_draft_path.empty()) {
         common_params dp = common_base_params_to_speculative(sp);
@@ -830,6 +852,10 @@ int main(int argc, char ** argv) {
     // DF_DRAFT=<drafter.gguf>: speculative decoding with that drafter (DFlash, DSpark, MTP, ...)
     if (const char * d = getenv("DF_DRAFT")) {
         df_set_draft(d);
+    }
+    // DF_LORA=<adapter.gguf> [DF_LORA_SCALE=1]: a LoRA adapter on the model, as llama-server --lora (--lora-scaled)
+    if (const char * l = getenv("DF_LORA")) {
+        df_set_lora(l, getenv("DF_LORA_SCALE") ? atof(getenv("DF_LORA_SCALE")) : 1.0);
     }
     // n_slots, or a GPU budget in GB ("2.5G") that df_plan turns into slots
     int               n_slots = atoi(argv[2]);

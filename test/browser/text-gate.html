@@ -1,0 +1,39 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>text gate vs llama.cpp</title>
+<pre id="out">running</pre>
+<script type="module">
+// Text gate for a native engine: its greedy continuation of each stored prompt in a chat refs file
+// (examples/chat/refs/*.json, written by scripts/record-refs.mjs --raw) against llama.cpp's reply, character for character.
+//   node examples/run-demo.mjs test/browser/text-gate.html --models <dir> --file <gguf> --ref examples/chat/refs/<x>.json [--engine lfm2]
+// ?poolGB sets the expert pool (default 4). The store goes under OPFS diskformer-test/<file> and stays for the next run.
+import { Lfm2MoeSsd } from '../../engines/lfm2_moe_ssd.js';
+import { storeKey } from '../../src/ingest.js';
+const ENGINES = { lfm2: Lfm2MoeSsd };
+const q = new URLSearchParams(location.search);
+const url = q.get('url'), Engine = ENGINES[q.get('engine') || 'lfm2'];
+const log = (s) => { document.getElementById('out').textContent += `\n${s}`; window.progressText = s; };
+try {
+  const ref = await (await fetch(q.get('ref'), { cache: 'no-store' })).json();
+  const t0 = performance.now();
+  const m = await Engine.load(null, { url, key: storeKey(url.split('/').pop()), root: 'diskformer-test', poolBytes: Number(q.get('poolGB') || 4) * 2 ** 30, maxCtx: 512,
+    onProgress: (e) => { if (e.status === 'weights' && e.total) log(`load ${e.kind || 'ingest'} ${e.loaded} of ${e.total}`); } });
+  log(`loaded in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+  const stops = new Set(m.stopTokenIds), rows = [];
+  for (const c of ref.conversations) {
+    const s0 = performance.now();
+    const g = await m.greedy(m.tokenizer.encode(c.prompt), c.tokens, { top: 1 });
+    // llama-server stops at an end-of-generation token and leaves it out of the reply
+    const end = g.ids.findIndex((id) => stops.has(id)), ids = end < 0 ? g.ids : g.ids.slice(0, end);
+    const ours = m.tokenizer.decode(ids), theirs = c.content;
+    let at = 0; while (at < ours.length && at < theirs.length && ours[at] === theirs[at]) at++;
+    const row = { name: c.name, identical: ours === theirs, sameUpTo: at, of: theirs.length, tokPerSec: +(ids.length / ((performance.now() - s0) / 1000)).toFixed(1), ...(ours === theirs ? {} : { ours, theirs }) };
+    rows.push(row);
+    log(`${row.identical ? 'OK  ' : 'DIFF'} ${c.name} ${row.identical ? '' : `first difference at char ${at} of ${theirs.length}`}`);
+  }
+  const identical = rows.filter((r) => r.identical).length;
+  window.result = { ok: identical === rows.length, identical, of: rows.length, about: ref.about, rows };
+  log(`${identical}/${rows.length} identical to the reference`);
+  await m.dispose();
+} catch (e) { window.result = { ok: false, error: `${e.code || e.name}: ${e.message}`, stack: e.stack }; log(window.result.error); }
+</script>

@@ -3,7 +3,7 @@
 // sync access handles, straight into the wasm heap. A GGUF gets into OPFS by download (resumable, from a URL) or by
 // copying a picked file; with opfs: false a picked File is read in place instead (slower).
 //
-// Messages in: load {opfsName | file, budget | slots, ctx, env, draft, extra} · chat {messages, n, thinking} · complete {prompt, n} (the gate)
+// Messages in: load {opfsName | file, budget | slots, ctx, env, draft, lora, loraScale, extra} · chat {messages, n, thinking} · complete {prompt, n} (the gate)
 //   · abort · download {url, name, size} · list · remove {name}
 // Messages out: log · progress · plan · loaded · piece · done · downloaded · models · removed · error
 import createModule from './dist/df-chat.mjs';  // built from ggml/build-wasm, see ggml/dist/BUILD.md
@@ -195,6 +195,9 @@ onmessage = async ({ data }) => {
       // draft: a drafter GGUF in OPFS (DFlash, DSpark, MTP...) for speculative decoding; read whole at load, not paged
       const draftFile = data.draft ? await (await ggufDir(false)).getFileHandle(data.draft).then((h) => h.getFile())
         .catch(() => { throw new Error(`${data.draft} is not in OPFS; download the drafter first`); }) : null;
+      // lora: a LoRA adapter GGUF in OPFS, applied at loraScale (default 1) as llama-server --lora does
+      const loraFile = data.lora ? await (await ggufDir(false)).getFileHandle(data.lora).then((h) => h.getFile())
+        .catch(() => { throw new Error(`${data.lora} is not in OPFS; download the adapter first`); }) : null;
       // extra: side files the model opens by name beside the GGUF (DeepSeek-V4.1's Engram tables), from OPFS
       const extraFiles = [];
       for (const name of data.extra || []) {
@@ -202,8 +205,9 @@ onmessage = async ({ data }) => {
           .catch(() => { throw new Error(`${name} is not in OPFS; download it first`); }));
       }
       mod.FS.mkdir('/m');
-      mod.FS.mount(mod.WORKERFS, { files: [...files, ...(draftFile ? [draftFile] : []), ...extraFiles] }, '/m');
+      mod.FS.mount(mod.WORKERFS, { files: [...files, ...(draftFile ? [draftFile] : []), ...(loraFile ? [loraFile] : []), ...extraFiles] }, '/m');
       if (draftFile) mod._df_set_draft(str('/m/' + draftFile.name));
+      if (loraFile) mod._df_set_lora(str('/m/' + loraFile.name), data.loraScale ?? 1);
       const t0 = performance.now();
       // a GPU budget (bytes) becomes slots through df_plan; else data.slots as given
       let slots = data.slots, plan = null;
@@ -214,7 +218,7 @@ onmessage = async ({ data }) => {
         slots = plan.slots;
       }
       const rc = await mod._df_load(str('/m/' + file.name), slots, data.ctx ?? 1024);
-      post('loaded', { rc, slots, plan, size: files.reduce((a, f) => a + f.size, 0), name: file.name, parts: files.length, draft: draftFile ? draftFile.name : null, ms: Math.round(performance.now() - t0) });
+      post('loaded', { rc, slots, plan, size: files.reduce((a, f) => a + f.size, 0), name: file.name, parts: files.length, draft: draftFile ? draftFile.name : null, lora: loraFile ? loraFile.name : null, ms: Math.round(performance.now() - t0) });
     } else if (data.type === 'complete') {
       const reply = await mod._df_complete(str(data.prompt), data.n ?? 64);
       post('done', { id: data.id, text: text(reply), stats: JSON.parse(text(mod._df_stats())) });

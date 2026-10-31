@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp b11669 (620d2225c), Metal (a shared server on 127.0.0.1:8090, -np 2, -c 32768), -ngl 99: llama-server /completion on the /apply-template prompt, temperature 0, max_tokens 64, on LFM2.5-24B-A2B-QAD-Q4_0.gguf (sha256 89617cc4d3a52e973ee8dea72c7df04285f582107385796ba903f81e540e4afa). Recorded 2026-10-31 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<|im_start|>user\nExplain the difference between TCP and UDP to a new programmer.<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "\nWe need to explain TCP vs UDP to a new programmer. First person, specific. No \"as an AI\". Lead with substance. Let me structure: start with a quick analogy or direct statement. Then contrast key points: connection vs connectionless, reliability, ordering, overhead, use cases. Keep it clear",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<|im_start|>user\nExtract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "\nWe need to extract name, city, age from sentence: \"Priya, 34, moved from Pune to Lisbon last year.\" The sentence has name",
+   "finish": "stop",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<|im_start|>user\nTranslate into Hindi: \"The library opens at nine and closes at six.\"<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "1.  **Analyze the source sentence:** \"The library opens at nine and closes at six.\"\n    *   Subject: The library\n    *   Verb 1: opens\n    *   Time 1: at nine\n    *   Conjunction: and\n    *   Verb 2: closes",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<|im_start|>user\nA train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "\nWe need to answer: A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show steps briefly.\n\nWe need to compute difference between 14:10 and 17:45.\n\nFrom 14:10 to 17:10 is 3 hours. Then",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<|im_start|>user\nWrite a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "We need to produce a SQL query that returns the top five customers with highest total order value, given two tables: customers(id, name) and orders(id, customer_id, amount). The question: \"Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<|im_start|>user\nList five major rivers of Africa, one per line, with the country where each reaches the sea.<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "We need to list five major rivers of Africa, one per line, with the country where each reaches the sea. So each line: River name",
+   "finish": "stop",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<|im_start|>user\nWhat do these emoji usually mean in a text message: 🙏 🔥 💀 ?<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "The user asks: \"What do these emoji usually mean in a text message: 🙏 🔥 💀 ?\" They want an explanation of the meaning of each emoji individually, and perhaps collectively. The user is asking about typical usage in text messages. This is a straightforward request for information about emoji meanings",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<|im_start|>user\nWrite a haiku about autumn leaves in a city.<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "\nWe need to write a haiku about autumn leaves in a city. Haiku: 5-",
+   "finish": "stop",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<|im_start|>system\nAnswer like a cheerful pirate, in two sentences.<|im_end|>\n<|im_start|>user\nWhat is the boiling point of water at sea level?<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "\nThe user is asking a straightforward factual question about the boiling point of water at sea level. This is basic science knowledge - water boils at 100 degrees Celsius (212 degrees Fahrenheit) at standard",
+   "finish": "stop",
+   "tokens": 41
+  }
+ ]
+}

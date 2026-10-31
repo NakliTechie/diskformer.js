@@ -12,7 +12,7 @@ post-build step):
 
 sha256 (check a copy with `shasum -a 256`):
 
-    9c532bdddb66821d7be2dff2d2008f9a976ca7b497574fa2f1520b4f9ab9ff58  df-chat.wasm
-    0f8a1a7e3eb75ef8f999d553d2fc1a124c4de1b6c6edb597643486752bcdce08  df-chat.mjs
+    4c4c2ac6e8a6dec6f30687b5ccaf20b1392e552580d69ba8bd87366c0b8dc9f1  df-chat.wasm
+    30f14aa3c1b561476f9ad80137807712f84a0ad7f9cd7c1f292a317871091016  df-chat.mjs
 
 Update the fork commit and the checksums whenever the build changes.

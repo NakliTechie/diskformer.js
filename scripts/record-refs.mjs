@@ -4,7 +4,12 @@
 // (-ot exps=WebGPU_Paged, read from the GGUF), so paged and unpaged runs of one backend can be compared
 // (scripts/compare-refs.mjs).
 //
-//   node scripts/record-refs.mjs <model.gguf> <out.json> [--port 8799] [--ctx 4096] [--server <llama-server>] [--paged <slots>] [--ngl 0 (CPU)] [--no-stream] [--raw] [--draft <drafter.gguf> --spec-type <t> --draft-max <n>]
+//   node scripts/record-refs.mjs <model.gguf> <out.json> [--port 8799] [--ctx 4096] [--server <llama-server>] [--paged <slots>] [--ngl 0 (CPU)] [--no-stream] [--raw] [--draft <drafter.gguf> --spec-type <t> --draft-max <n>] [--lora <adapter.gguf> [--lora-scale 1]]
+//                                   [--url http://127.0.0.1:8090 [--lora-request <id>:<scale>]]
+// --lora: a LoRA adapter on the model (--lora, or --lora-scaled with --lora-scale), named in the refs' `about`.
+// --url: record from a llama-server already running on <model.gguf> (shared with another session) instead of starting
+// one; --lora-request sets an adapter it loaded (--lora, --lora-init-without-apply) per request, so one server records
+// both the base (scale 0) and the adapter (scale 1).
 // --draft: speculative decoding with a drafter (-md, --spec-type, e.g. draft-dflash); greedy replies must not change.
 // --raw: the reply as generated, reasoning included (--reasoning-format none), as the browser driver returns it; for
 // models that reason first (gpt-oss), whose 64-token reply is otherwise empty. The reply is generated from the stored
@@ -23,8 +28,12 @@ if (!gguf || !out) {
 const opt = (name, dflt) => (rest.includes(name) ? rest[rest.indexOf(name) + 1] : dflt);
 const port = +opt('--port', 8799), ctx = +opt('--ctx', 4096), bin = opt('--server', 'llama-server'), paged = opt('--paged', null), ngl = opt('--ngl', '99');
 const backend = ngl === '0' ? 'CPU' : bin === 'llama-server' ? 'Metal' : paged ? `WebGPU, experts paged (${paged} slots)` : 'WebGPU';
+const lora = opt('--lora', null), loraScale = opt('--lora-scale', null);
+const loraArgs = lora ? (loraScale ? ['--lora-scaled', lora, loraScale] : ['--lora', lora]) : [];
+const loraNote = lora ? `, LoRA ${basename(lora)} at scale ${loraScale || 1}` : opt('--lora-request', null) ? `, LoRA id:scale ${opt('--lora-request', null)} per request` : '';
 const drafter = opt('--draft', null) ? `, speculative with ${basename(opt('--draft', null))} (${opt('--spec-type', 'draft-dflash')})` : '';
-const base = `http://127.0.0.1:${port}`;
+const url = opt('--url', null), base = url || `http://127.0.0.1:${port}`;
+const loraReq = opt('--lora-request', null) ? [{ id: +opt('--lora-request', null).split(':')[0], scale: +opt('--lora-request', null).split(':')[1] }] : null;
 const conversations = JSON.parse(readFileSync(new URL('../examples/chat/refs/gemma.json', import.meta.url))).conversations;
 
 const sha256 = () => new Promise((resolve, reject) => {
@@ -47,7 +56,7 @@ const GREEDY = { temperature: 0, repeat_penalty: 1, presence_penalty: 0, frequen
 
 // The reply to a rendered prompt, greedy, streamed (raw mode).
 async function complete(prompt, maxTokens) {
-  const body = { prompt, n_predict: maxTokens, ...GREEDY, cache_prompt: false };
+  const body = { prompt, n_predict: maxTokens, ...GREEDY, cache_prompt: false, ...(loraReq ? { lora: loraReq } : {}) };
   if (rest.includes('--no-stream')) {
     let out;
     for (let t = 0; t < 3; t++) {
@@ -87,7 +96,7 @@ async function chat(messages, maxTokens) {
     // the same reply.
     let out;
     for (let t = 0; t < 3; t++) {
-      out = spawnSync('curl', ['-s', '--max-time', '3600', '-H', 'content-type: application/json', '-d', JSON.stringify({ messages, ...GREEDY, max_tokens: maxTokens }), `${base}/v1/chat/completions`], { encoding: 'utf8', maxBuffer: 1 << 24 });
+      out = spawnSync('curl', ['-s', '--max-time', '3600', '-H', 'content-type: application/json', '-d', JSON.stringify({ messages, ...GREEDY, max_tokens: maxTokens, ...(loraReq ? { lora: loraReq } : {}) }), `${base}/v1/chat/completions`], { encoding: 'utf8', maxBuffer: 1 << 24 });
       if (out.status === 0) break;
       console.error(`curl exited ${out.status}; retrying`);
     }
@@ -96,7 +105,7 @@ async function chat(messages, maxTokens) {
     return { content: r.choices[0].message.content, finish: r.choices[0].finish_reason };
   }
   const r = await fetch(base + '/v1/chat/completions', { method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ messages, ...GREEDY, max_tokens: maxTokens, stream: true }) });
+    body: JSON.stringify({ messages, ...GREEDY, max_tokens: maxTokens, stream: true, ...(loraReq ? { lora: loraReq } : {}) }) });
   if (!r.ok) throw new Error(`/v1/chat/completions: HTTP ${r.status} ${await r.text()}`);
   let content = '', finish = null, buf = '';
   const dec = new TextDecoder();
@@ -118,7 +127,7 @@ async function chat(messages, maxTokens) {
 // 24 GB Mac: repacking copies every weight into RAM, and the server swapped for minutes and never became healthy).
 const cpu = ngl === '0' ? ['-lm', 'mmap', '--no-repack'] : [];
 const draft = opt('--draft', null) ? ['-md', opt('--draft', null), '--spec-type', opt('--spec-type', 'draft-dflash'), '-ngld', ngl, ...(opt('--draft-max', null) ? ['--spec-draft-n-max', opt('--draft-max', null)] : [])] : [];
-const server = spawn(bin, ['-m', gguf, '-ngl', ngl, ...cpu, '-c', String(ctx), '--port', String(port), '--jinja', '--timeout', '3600', ...draft, ...(paged ? ['-ot', 'exps=WebGPU_Paged'] : []), ...(rest.includes('--raw') ? ['--reasoning-format', 'none'] : [])], {
+const server = url ? { exitCode: null, signalCode: null, kill() {}, stderr: { on() {} }, on() {} } : spawn(bin, ['-m', gguf, '-ngl', ngl, ...cpu, '-c', String(ctx), '--port', String(port), '--jinja', '--timeout', '3600', ...draft, ...loraArgs, ...(paged ? ['-ot', 'exps=WebGPU_Paged'] : []), ...(rest.includes('--raw') ? ['--reasoning-format', 'none'] : [])], {
   stdio: ['ignore', 'ignore', 'pipe'],
   env: paged ? { ...process.env, GGML_WEBGPU_PAGED_SLOTS: paged, GGML_WEBGPU_PAGED_FILE: gguf } : process.env,
 });
@@ -137,7 +146,9 @@ try {
     if (i > 1800) throw new Error('llama-server did not become healthy in 30 minutes');
     await new Promise((r) => setTimeout(r, 1000));
   }
-  const ver = spawnSync(bin, ['--version'], { encoding: 'utf8' });  // prints on stderr
+  // a shared server: its own build line from /props
+  const props = url ? await fetch(`${base}/props`).then((r) => r.json()) : null;
+  const ver = url ? { stdout: '', stderr: `version: ${props.build_info.replace(/^b(\d+)-([0-9a-f]+)$/, '$1 ($2)')}` } : spawnSync(bin, ['--version'], { encoding: 'utf8' });  // prints on stderr
   // Release builds print "version: 9830 (c1a1c8ee9)"; a fork build "version: 0.6.0-dev (build 11473, commit 3119cf53d)".
   const vs = `${ver.stdout}${ver.stderr}`, v = vs.match(/version: (\d+) \(([0-9a-f]+)\)/), f = vs.match(/build (\d+), commit ([0-9a-f]+)/);
   const version = v ? `b${v[1]} (${v[2]})` : f ? `fork build ${f[1]} (${f[2]})` : '';
@@ -149,7 +160,7 @@ try {
     console.log(`${c.name}: ${JSON.stringify(content.slice(0, 60))}…`);
   }
   const doc = {
-    about: `llama.cpp ${version || '?'}, ${backend}${drafter}, -ngl ${ngl}: llama-server ${rest.includes('--raw') ? '/completion on the /apply-template prompt' : '/v1/chat/completions'}, temperature 0, max_tokens 64, on ${basename(gguf)} (sha256 ${await sha256()}). Recorded ${new Date().toISOString().slice(0, 10)} by scripts/record-refs.mjs.`,
+    about: `llama.cpp ${version || '?'}, ${backend}${drafter}${loraNote}, -ngl ${ngl}: llama-server ${rest.includes('--raw') ? '/completion on the /apply-template prompt' : '/v1/chat/completions'}, temperature 0, max_tokens 64, on ${basename(gguf)} (sha256 ${await sha256()}). Recorded ${new Date().toISOString().slice(0, 10)} by scripts/record-refs.mjs.`,
     conversations: result,
   };
   writeFileSync(out, JSON.stringify(doc, null, 1) + '\n');
