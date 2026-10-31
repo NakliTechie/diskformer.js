@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp fork build 11669 (620d2225c), Metal, -ngl 99: llama-server /completion on the /apply-template prompt, temperature 0, max_tokens 64, on LFM2.5-24B-A2B-pi-QAD-Q4_0-dense-Q8_0.gguf (sha256 f3348381f00f34ce582fb96051bb5bc366914cae8eaa207915b5a50ab8fc2a8c). Recorded 2026-10-31 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<|im_start|>user\nExplain the difference between TCP and UDP to a new programmer.<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "\nWe need to explain TCP vs UDP to a new programmer. First person, specific. No \"as an AI\". Lead with substance. Keep it clear. Let me structure: start with a quick analogy or direct statement. Then contrast key points: connection vs connectionless, reliability, ordering, speed, use cases",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<|im_start|>user\nExtract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "\nWe need to extract name, city, age from sentence: \"Priya, 34, moved from Pune to Lisbon last year.\" The sentence has name",
+   "finish": "stop",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<|im_start|>user\nTranslate into Hindi: \"The library opens at nine and closes at six.\"<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "1.  **Analyze the source sentence:** \"The library opens at nine and closes at six.\"\n    *   Subject: The library\n    *   Verb 1: opens\n    *   Time 1: at nine\n    *   Conjunction: and\n    *   Verb 2: closes",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<|im_start|>user\nA train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "\nWe need to answer: A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show steps briefly.\n\nWe need to compute difference between 14:10 and 17:45.\n\nFrom 14:10 to 17:10 is 3 hours. Then",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<|im_start|>user\nWrite a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "We need to produce a SQL query that returns the top 5 customers with highest total order value. The schema: customers(id, name) and orders(id, customer_id, amount). So we need to join customers with orders, group by customer, sum(amount) as total_order_value, order descending, limit ",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<|im_start|>user\nList five major rivers of Africa, one per line, with the country where each reaches the sea.<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "We need to list five major rivers of Africa, one per line, with the country where each reaches the sea. So each line: River name",
+   "finish": "stop",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<|im_start|>user\nWhat do these emoji usually mean in a text message: 🙏 🔥 💀 ?<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "The user asks: \"What do these emoji usually mean in a text message: 🙏 🔥 💀 ?\" They want an explanation of the meaning of these three emojis in a text message context. The user is asking for a general interpretation. There's no disallowed content. It's a straightforward question",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<|im_start|>user\nWrite a haiku about autumn leaves in a city.<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "\nWe need to write a haiku about autumn leaves in a city. Haiku: 5-",
+   "finish": "stop",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<|im_start|>system\nAnswer like a cheerful pirate, in two sentences.<|im_end|>\n<|im_start|>user\nWhat is the boiling point of water at sea level?<|im_end|>\n<|im_start|>assistant\n<think>",
+   "content": "\nThe user is asking a straightforward factual question about the boiling point of water at sea level. This is basic science knowledge - water boils at 100 degrees Celsius (212 degrees Fahrenheit) at standard",
+   "finish": "stop",
+   "tokens": 41
+  }
+ ]
+}

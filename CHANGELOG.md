@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.6.17 (2026-10-31)
+- LoRA adapters on the llama.cpp path: `Llama.load({ name, lora, loraScale })` applies a LoRA GGUF stored in OPFS
+  beside the model (`df_set_lora` in `ggml/driver.cpp`, llama.cpp's `llama_adapter_lora_init`, as `llama-server
+  --lora` does); `df_plan` counts the adapter's bytes. An adapter on the dense layers leaves expert paging alone.
+  `scripts/chrome-gate.mjs --lora <adapter.gguf> [--lora-scale s]`; natively `DF_LORA=<adapter.gguf>`. ggml/dist rebuilt.
+- `engines/lfm2_moe_ssd.js` runs a LoRA-merged LFM2.5-24B-A2B: when the file stores the dense matrices as Q8_0 it uses
+  the Q8_0 matmul kernels for them, while the experts stay on the Q4_0 kernels. The merged file is made with llama.cpp:
+  `llama-export-lora` (touched matrices F16), then `llama-quantize --allow-requantize --token-embedding-type q6_k
+  --tensor-type _exps=q4_0 <merged> <out> Q8_0`, which copies every tensor already at its target type byte for byte.
+  For harness-hub's Pi adapter (`harness-hub/LFM2.5-24B-A2B-pi-GGUF` at a994cf7, rank 32, alpha 64) on the QAD-Q4_0
+  base: 13.95 GB, the 106 touched matrices Q8_0, the other 322 tensors (12.91 GB of experts among them) identical to
+  the base.
+- Gates (M4 Pro, Chrome, 4 GB budget or pool, greedy, 64 tokens, the 9 chat conversations), against llama.cpp b11669
+  on Metal (`examples/chat/refs/lfm2.5-24b-a2b-pi-base.json`, `-pi-lora.json`; the adapter changes 3 of 9 replies):
+  llama.cpp path in Chrome, base + adapter: 8/9 identical (without the adapter 7/9, the path's own baseline); native
+  engine on the merged file: 8/9 (on the base file 8/9). Every miss is a late split (character 112 or later) where
+  Metal llama.cpp on the merged file also splits from the run-time adapter (`-pi-merged.json`: 7/9).
+- `scripts/record-refs.mjs`: `--lora`, and `--url <server> --lora-request id:scale` to record from a running
+  llama-server. `test/browser/text-gate.html`: a native engine's greedy text against a refs file (adds BOS as
+  llama-server's /completion does).
+
 ## 0.6.16 (2026-10-31)
 - Chrome 156 fix: Ternary Bonsai 2 27B, Gemma 4 E2B, LFM2.5 and the IQ-quant dense path failed to load on Apple GPUs
   with "Mixed precision subgroup matrix multiply is not supported by the device". Their prefill kernels multiply f16

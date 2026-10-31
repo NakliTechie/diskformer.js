@@ -22,12 +22,16 @@ try {
   const stops = new Set(m.stopTokenIds), rows = [];
   for (const c of ref.conversations) {
     const s0 = performance.now();
-    const g = await m.greedy(m.tokenizer.encode(c.prompt), c.tokens, { top: 1 });
+    // llama-server's /completion adds BOS when it tokenizes; the stored prompt (from /apply-template) leaves it out.
+    // ?bos=0 for a model whose GGUF turns BOS off.
+    const ids = m.tokenizer.encode(c.prompt);
+    if (q.get('bos') !== '0' && m.cfg.bos !== undefined && ids[0] !== m.cfg.bos) ids.unshift(m.cfg.bos);
+    const g = await m.greedy(ids, c.tokens, { top: 1 });
     // llama-server stops at an end-of-generation token and leaves it out of the reply
-    const end = g.ids.findIndex((id) => stops.has(id)), ids = end < 0 ? g.ids : g.ids.slice(0, end);
-    const ours = m.tokenizer.decode(ids), theirs = c.content;
+    const end = g.ids.findIndex((id) => stops.has(id)), out = end < 0 ? g.ids : g.ids.slice(0, end);
+    const ours = m.tokenizer.decode(out), theirs = c.content;
     let at = 0; while (at < ours.length && at < theirs.length && ours[at] === theirs[at]) at++;
-    const row = { name: c.name, identical: ours === theirs, sameUpTo: at, of: theirs.length, tokPerSec: +(ids.length / ((performance.now() - s0) / 1000)).toFixed(1), ...(ours === theirs ? {} : { ours, theirs }) };
+    const row = { name: c.name, identical: ours === theirs, sameUpTo: at, of: theirs.length, tokPerSec: +(out.length / ((performance.now() - s0) / 1000)).toFixed(1), ...(ours === theirs ? {} : { ours, theirs }) };
     rows.push(row);
     log(`${row.identical ? 'OK  ' : 'DIFF'} ${c.name} ${row.identical ? '' : `first difference at char ${at} of ${theirs.length}`}`);
   }
