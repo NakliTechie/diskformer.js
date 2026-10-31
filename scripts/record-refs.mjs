@@ -27,7 +27,8 @@ if (!gguf || !out) {
 }
 const opt = (name, dflt) => (rest.includes(name) ? rest[rest.indexOf(name) + 1] : dflt);
 const port = +opt('--port', 8799), ctx = +opt('--ctx', 4096), bin = opt('--server', 'llama-server'), paged = opt('--paged', null), ngl = opt('--ngl', '99');
-const backend = ngl === '0' ? 'CPU' : bin === 'llama-server' ? 'Metal' : paged ? `WebGPU, experts paged (${paged} slots)` : 'WebGPU';
+// --url: how that server runs is not known here; --backend describes it (e.g. 'Metal, -ngl 99')
+const backend = opt('--url', null) ? opt('--backend', 'a running llama-server') : ngl === '0' ? 'CPU' : bin === 'llama-server' ? 'Metal' : paged ? `WebGPU, experts paged (${paged} slots)` : 'WebGPU';
 const lora = opt('--lora', null), loraScale = opt('--lora-scale', null);
 const loraArgs = lora ? (loraScale ? ['--lora-scaled', lora, loraScale] : ['--lora', lora]) : [];
 const loraNote = lora ? `, LoRA ${basename(lora)} at scale ${loraScale || 1}` : opt('--lora-request', null) ? `, LoRA id:scale ${opt('--lora-request', null)} per request` : '';
@@ -160,7 +161,7 @@ try {
     console.log(`${c.name}: ${JSON.stringify(content.slice(0, 60))}…`);
   }
   const doc = {
-    about: `llama.cpp ${version || '?'}, ${backend}${drafter}${loraNote}, -ngl ${ngl}: llama-server ${rest.includes('--raw') ? '/completion on the /apply-template prompt' : '/v1/chat/completions'}, temperature 0, max_tokens 64, on ${basename(gguf)} (sha256 ${await sha256()}). Recorded ${new Date().toISOString().slice(0, 10)} by scripts/record-refs.mjs.`,
+    about: `llama.cpp ${version || '?'}, ${backend}${drafter}${loraNote}${opt('--url', null) ? '' : `, -ngl ${ngl}`}: llama-server ${rest.includes('--raw') ? '/completion on the /apply-template prompt' : '/v1/chat/completions'}, temperature 0, max_tokens 64, on ${basename(gguf)} (sha256 ${await sha256()}). Recorded ${new Date().toISOString().slice(0, 10)} by scripts/record-refs.mjs.`,
     conversations: result,
   };
   writeFileSync(out, JSON.stringify(doc, null, 1) + '\n');

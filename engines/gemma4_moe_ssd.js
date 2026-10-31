@@ -588,13 +588,6 @@ export class Gemma4MoeSsd extends Qwen3MoeSsd {
     this.chunkTokens = Math.max(2, Math.floor(opts.prefillChunk || 256));
   }
 
-  // A bind group whose entries are buffers or { buffer, offset, size } ranges.
-  bindR(name, entries) {
-    return this.device.createBindGroup({
-      layout: this.pipeline(name).getBindGroupLayout(0),
-      entries: entries.map((e, i) => ({ binding: i, resource: e.buffer ? e : { buffer: e } })),
-    });
-  }
 
   // Dense upload; the Q6_K token table split into aligned planes on the GPU (the raw copy is then freed);
   // the full-attention layers' RoPE frequency factors on the CPU side.
@@ -674,6 +667,12 @@ export class Gemma4MoeSsd extends Qwen3MoeSsd {
     for (let l = 0; l < Lc; l++) {
       const p = (n) => W[`blk.${l}.${n}`], s = shapeOf(l), rope = c.swa[l] ? a.ropeS : a.ropeF;
       const hasV = !!p('attn_v.weight');
+      // run-time LoRA hooks (engines/lora.js): the attention projections and the dense FFN
+      for (const [t, site, x, y] of [['attn_q', 'q', a.xn, a.q], ['attn_k', 'k', a.xn, a.k], ...(hasV ? [['attn_v', 'v', a.xn, a.vr]] : []),
+        ['attn_output', 'o', a.att, a.o], ['ffn_gate', 'mg', a.xn, { buffer: a.mgu, offset: 0, size: gateBytes }],
+        ['ffn_up', 'mu', a.xn, { buffer: a.mgu, offset: gateBytes, size: gateBytes }], ['ffn_down', 'md', a.ma, a.md]]) {
+        this.loraIo(`blk.${l}.${t}.weight`, l, site, x, y);
+      }
       const ly = {
         swa: c.swa[l], hasV,
         rmsA: this.bind('rmsnorm', [a.x, p('attn_norm.weight').raw, a.xn, u.rmsH]),
@@ -762,6 +761,8 @@ export class Gemma4MoeSsd extends Qwen3MoeSsd {
     this.gB = { embed: this.bind('embedQ6KB', [this.q6.ql, this.q6.qh, this.q6.sc, this.q6.dd, b.ids, b.x, u.embed, qb]) };
     for (let l = 0; l < c.layers; l++) {
       const n = (t) => `blk.${l}.${t}`, raw = (t) => W[n(t)].raw, sh = shapeOf(l), hasV = !!W[n('attn_v.weight')];
+      for (const [t, x, y] of [['attn_q', b.xn, b.q], ['attn_k', b.xn, b.k], ...(hasV ? [['attn_v', b.xn, b.vr]] : []), ['attn_output', b.att, b.o],
+        ['ffn_gate', b.xn, b.mg], ['ffn_up', b.xn, b.mu], ['ffn_down', b.ma, b.md]]) this.loraIoB(n(`${t}.weight`), x, y);
       const rope = c.swa[l] ? b.ropeS : b.ropeF;
       this.layers[l].B = {
         rmsA: this.bind('rmsnormB', [b.x, raw('attn_norm.weight'), b.xn, u.rmsH]),
@@ -803,6 +804,7 @@ export class Gemma4MoeSsd extends Qwen3MoeSsd {
     d('rmsnormB', g.rmsA, T);
     d('matmulQ4T', g.q, mm(QN), tt); d('matmulQ4T', g.k, mm(kvn), tt);
     if (g.v) d('matmulQ4T', g.v, mm(kvn), tt);
+    this.encodeLoraB(pass, l, 'q', T); this.encodeLoraB(pass, l, 'k', T); this.encodeLoraB(pass, l, 'v', T);
     d('vNormB', g.vn, c.kvHeads[l], T);
     d('qkNormRopeB', g.ropeQ, c.heads, T); d('qkNormRopeB', g.ropeK, c.kvHeads[l], T);
     d('kvStoreB', g.kv, Math.ceil(kvn / 256), T);
@@ -810,11 +812,14 @@ export class Gemma4MoeSsd extends Qwen3MoeSsd {
     d('softmaxB', g.soft, c.heads * T);
     d('attnOutB', g.attOut, Math.ceil(QN / 256), T);
     d('matmulQ4T', g.o, mm(H), tt);
+    this.encodeLoraB(pass, l, 'o', T);
     d('rmsnormAddB', g.postA, T);
     d('rmsnormB', g.rmsF, T);
     d('matmulQ4T', g.mg, mm(DF), tt); d('matmulQ4T', g.mu, mm(DF), tt);
+    this.encodeLoraB(pass, l, 'mg', T); this.encodeLoraB(pass, l, 'mu', T);
     d('gegluSplitB', g.mact, Math.ceil(DF / 256), T);
     d('matmulQ4T', g.md, mm(H), tt);
+    this.encodeLoraB(pass, l, 'md', T);
     d('rmsnormB', g.mpost, T);
     d('rmsnormB', g.xm, T);
     d('rmsnormKB', g.rp, T);
@@ -940,6 +945,7 @@ export class Gemma4MoeSsd extends Qwen3MoeSsd {
     d('rmsnorm', g.rmsA, 1);
     d('matmulQ4', g.q, Math.ceil(QN / 4)); d('matmulQ4', g.k, Math.ceil(kvn / 4));
     if (g.hasV) d('matmulQ4', g.v, Math.ceil(kvn / 4));
+    this.encodeLora(pass, l, 'q'); this.encodeLora(pass, l, 'k'); this.encodeLora(pass, l, 'v');
     d('vNorm', g.vn, c.kvHeads[l]);
     d('qkNormRope', g.ropeQ, c.heads); d('qkNormRope', g.ropeK, c.kvHeads[l]);
     d('kvStore', g.kv, Math.ceil(kvn / 256));
@@ -947,12 +953,15 @@ export class Gemma4MoeSsd extends Qwen3MoeSsd {
     d('softmaxW', g.soft, c.heads);
     d('attnOutW', g.attOut, Math.ceil(QN / 256));
     d('matmulQ4', g.o, Math.ceil(c.hidden / 4));
+    this.encodeLora(pass, l, 'o');
     d('rmsnormAdd', g.postA, 1);
     if (g.capA) d('copyAt', g.capA, Math.ceil(c.hidden / 256));
     d('rmsnorm', g.rmsF, 1);
     d('matmulQ4', g.mg, Math.ceil(c.denseFf / 4)); d('matmulQ4', g.mu, Math.ceil(c.denseFf / 4));
+    this.encodeLora(pass, l, 'mg'); this.encodeLora(pass, l, 'mu');
     d('geglu', g.mact, Math.ceil(c.denseFf / 256));
     d('matmulQ4', g.md, Math.ceil(c.hidden / 4));
+    this.encodeLora(pass, l, 'md');
     d('rmsnorm', g.mpost, 1);
     d('rmsnorm', g.xm, 1);
     if (this.prefetch) for (const p of g.pf) { d('rmsnormK', p.rp, 1); d('matmulF32', p.router, c.experts); d('topk', p.topk, 1); }

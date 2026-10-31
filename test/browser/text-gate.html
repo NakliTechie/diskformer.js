@@ -10,8 +10,10 @@
 // Run-time LoRA: --query "adapter=/models/<lora.gguf>&ref2=/examples/chat/refs/<y>.json" runs three phases on one
 // loaded engine: the plain model against ref, the adapter switched on against ref2, then switched off against ref again.
 import { Lfm2MoeSsd } from '../../engines/lfm2_moe_ssd.js';
+import { Gemma4MoeSsd } from '../../engines/gemma4_moe_ssd.js';
+import { Qwen35MoeSsd } from '../../engines/qwen35_moe_ssd.js';
 import { storeKey } from '../../src/ingest.js';
-const ENGINES = { lfm2: Lfm2MoeSsd };
+const ENGINES = { lfm2: Lfm2MoeSsd, gemma: Gemma4MoeSsd, qwen35: Qwen35MoeSsd };
 const q = new URLSearchParams(location.search);
 const url = q.get('url'), Engine = ENGINES[q.get('engine') || 'lfm2'];
 const log = (s) => { document.getElementById('out').textContent += `\n${s}`; window.progressText = s; };
@@ -21,10 +23,10 @@ async function phase(m, name, ref) {
   const stops = new Set(m.stopTokenIds), rows = [];
   for (const c of ref.conversations) {
     const s0 = performance.now();
-    // llama-server's /completion adds BOS when it tokenizes; the stored prompt (from /apply-template) leaves it out.
-    // ?bos=0 for a model whose GGUF turns BOS off.
+    // llama-server's /completion adds BOS when the GGUF asks for it (m.addBos); the stored prompt (from
+    // /apply-template) leaves it out. ?bos=0 never adds it.
     const ids = m.tokenizer.encode(c.prompt);
-    if (q.get('bos') !== '0' && m.cfg.bos !== undefined && ids[0] !== m.cfg.bos) ids.unshift(m.cfg.bos);
+    if (q.get('bos') !== '0' && m.addBos && m.cfg.bos !== undefined && ids[0] !== m.cfg.bos) ids.unshift(m.cfg.bos);
     const g = await m.greedy(ids, c.tokens, { top: 1 });
     // llama-server stops at an end-of-generation token and leaves it out of the reply
     const end = g.ids.findIndex((id) => stops.has(id)), out = end < 0 ? g.ids : g.ids.slice(0, end);

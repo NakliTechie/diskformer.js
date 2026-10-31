@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp b11669 (620d2225c), CPU (llama-server -ngl 0 -lm mmap --no-repack: 36.9 GB on a 24 GB Mac), LoRA qwen36-35b-random-lora.gguf (scripts/make-test-lora.py, seed 0) loaded with --lora-init-without-apply, scale 1 per request: llama-server /completion on the /apply-template prompt, temperature 0, max_tokens 64, on Qwen3.6-35B-A3B-Q8_0.gguf (sha256 d1a395809f65a43a13ad119eb4e7acdef1ac6d68120f39902c8ab96e72794a59). Recorded 2026-10-31 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<|im_start|>user\nExplain the difference between TCP and UDP to a new programmer.<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "Here's a thinking process:\n\n1.  **Understand User Request:**\n   - **Topic:** TCP vs UDP\n   - **Target Audience:** New programmer (needs clear, accessible explanations, avoid excessive jargon, use analogies, focus on practical implications)\n   - **Goal:** Explain the key",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<|im_start|>user\nExtract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Input Sentence:** \"Priya, 34, moved from Pune to",
+   "finish": "stop",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<|im_start|>user\nTranslate into Hindi: \"The library opens at nine and closes at six.\"<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "Here's a thinking process:\n\n1.  **Analyze the Source Sentence:**\n   - Source: \"The library opens at nine and closes at six.\"\n   - Key components:\n     - Subject: The library\n     - Verb 1: opens (at nine)\n     - Conjunction:",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<|im_start|>user\nA train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "Here's a thinking process:\n\n1.  **Understand the User's Request:**\n   - Start time: 14:10 (2:10 PM)\n   - End time: 17:45 (5:45 PM)\n   - Question: How long is",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<|im_start|>user\nWrite a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "Here's a thinking process:\n\n1.  **Understand the User Request:**\n   - **Goal:** Find the top 5 customers by total order value.\n   - **Tables:** \n     - `customers(id, name)`\n     - `orders(id, customer_id, amount)`\n   -",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<|im_start|>user\nList five major rivers of Africa, one per line, with the country where each reaches the sea.<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "Here's a thinking process:\n\n1.  **Analyze User Request:**\n   - **Task:** List five major rivers of Africa\n",
+   "finish": "stop",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<|im_start|>user\nWhat do these emoji usually mean in a text message: 🙏 🔥 💀 ?<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - User asks about the meaning of three specific emojis in text messages: 🙏 🔥 💀\n   - Context: Text messaging/social media communication\n   - Need to explain each emoji's common meanings, especially in modern",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<|im_start|>user\nWrite a haiku about autumn leaves in a city.<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "Thinking Process:\n\n1.  **Deconstruct the request:**\n    *   Topic: Autumn leaves",
+   "finish": "stop",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<|im_start|>system\nAnswer like a cheerful pirate, in two sentences.<|im_end|>\n<|im_start|>user\nWhat is the boiling point of water at sea level?<|im_end|>\n<|im_start|>assistant\n<think>\n",
+   "content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Question:** What is the boiling point of water at sea level?\n   - **Constraint:** Answer like",
+   "finish": "stop",
+   "tokens": 41
+  }
+ ]
+}

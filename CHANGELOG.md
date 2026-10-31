@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+- Run-time LoRA in every native MoE engine. The kernels and loader move to `engines/lora.js`; `Qwen3MoeSsd` (so every
+  engine) has `loadAdapter(source, { scale })` and `setAdapter(adapter | null)`. An engine registers each matmul an
+  adapter may follow with `loraIo(tensor, layer, site, x, y)` (and `loraIoB` for its chunked prefill), and adds an
+  `encodeLora` / `encodeLoraB` hook after it. Hooked: Gemma 4 (attention q/k/v/output, dense FFN gate/up/down),
+  Qwen3.6 (DeltaNet `attn_qkv` / `attn_gate` / `ssm_beta` / `ssm_alpha` / `ssm_out`, attention q/k/v/output, shared
+  expert gate/up/down), LFM2.5 (unchanged behaviour, now on the shared code), and the Qwen3 base engine (attention
+  q/k/v/output; not gated, no Q8_0 Qwen3 file on this machine). An adapter on a matrix with no hook, or with no
+  chunked-prefill hook in an engine that batches its prefill, is refused.
+- `scripts/make-test-lora.py`: a seeded random LoRA GGUF in llama.cpp's format, for models with no published adapter;
+  the gate then compares the engine with `llama-server --lora` on the same file. `scripts/record-refs.mjs --url`
+  takes `--backend` to describe the running server.
+- Engines carry `addBos` (from the GGUF's `tokenizer.ggml.add_bos_token`, as llama.cpp tokenizes a raw prompt);
+  `test/browser/text-gate.html` uses it (Qwen3.6 sets it false) and runs `--engine gemma | qwen35 | lfm2`.
+- Gates, one loaded engine each in Chrome, greedy, 64 tokens, 9 prompts: plain / adapter on / plain again.
+  Gemma 4 26B-A4B Q4_0 with a random rank-32 adapter on 205 matrices, against Metal llama.cpp: 9/9, 8/9, 9/9 (the
+  miss is at char 193 of 214, where the adapter first changes that reply; ours kept the plain branch). Qwen3.6
+  35B-A3B Q8_0 with a random adapter on 310 matrices, against CPU llama.cpp (36.9 GB, mmap): 6/9, 9/9, 6/9 (the plain
+  misses are the WebGPU engine against the CPU reference, with no adapter). LFM2.5 with the Pi adapter: 8/9, 9/9,
+  8/9, as in 0.6.19. In every engine the second plain phase gives the same text as the first.
+
 ## 0.6.19 (2026-10-31)
 - Run-time LoRA in the native LFM2.5 engine: `await engine.loadAdapter(url | Blob | bytes, { scale })` reads a LoRA
   GGUF (llama.cpp's format: `W.lora_a` / `W.lora_b`, F16) onto the GPU, and `await engine.setAdapter(adapter | null)`

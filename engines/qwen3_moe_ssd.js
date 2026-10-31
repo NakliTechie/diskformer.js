@@ -26,6 +26,7 @@ import { ExpertStreamer } from '../src/expert-stream.js';
 import { GGML, Q8_BLOCK, Q4_BLOCK, Q6K_BLOCK, parseGguf, tensorBytes } from '../src/gguf.js';
 import { ingestGguf as ingestStore, ingestProgress, fileFetch, storeKey, readStore, removeStore } from '../src/ingest.js';
 import { DiskformerError, isDiskformerError, codedError } from '../src/errors.js';
+import { LORA_KERNELS, loadLora } from './lora.js';
 import './subgroup-matrix-guard.js'; // qwen35_dense.js and iq_quants.js build mixed f16/f32 subgroup-matrix kernels on this device
 export { GGML, Q4_BLOCK, Q6K_BLOCK, parseGguf, tensorBytes, splitQ4 } from '../src/gguf.js';
 export { ingestProgress } from '../src/ingest.js';
@@ -905,6 +906,10 @@ export class Qwen3MoeSsd {
     this.manifest = manifest;
     this.cfg = this.constructor.configFrom(gguf.kv);
     this.tokenizer = this.constructor.tokenizerFrom(gguf.kv);
+    this.arch = gguf.kv['general.architecture'];  // a LoRA must be for the same architecture (loadAdapter)
+    this.addBos = gguf.kv['tokenizer.ggml.add_bos_token'] !== false;  // as llama.cpp tokenizes a raw prompt (unset: add)
+    this.loraSites = new Map();                   // tensor name → where a run-time LoRA hooks in (loraIo)
+    this.adapter = null;
     this.opts = opts;
     this.maxCtx = Math.min(opts.maxCtx || 4096, this.cfg.contextLength);
     this.gpuBytes = { dense: 0, pool: 0, kv: 0, act: 0 };
@@ -931,8 +936,8 @@ export class Qwen3MoeSsd {
     this.device.queue.writeBuffer(b, 0, ab);
     return b;
   }
-  // The kernel sources; a subclass adds its own.
-  get kernels() { return WGSL; }
+  // The kernel sources; a subclass adds its own. Every engine carries the run-time LoRA kernels (engines/lora.js).
+  get kernels() { return (this._baseKernels ||= { ...WGSL, ...LORA_KERNELS }); }
   pipeline(name) {
     if (!this.pipelines[name]) {
       const code = this.kernels[name];
@@ -947,6 +952,40 @@ export class Qwen3MoeSsd {
       layout: this.pipeline(name).getBindGroupLayout(0),
       entries: buffers.map((b, i) => ({ binding: i, resource: { buffer: b } })),
     });
+  }
+  // A bind group whose entries are buffers or { buffer, offset, size } ranges.
+  bindR(name, entries) {
+    return this.device.createBindGroup({
+      layout: this.pipeline(name).getBindGroupLayout(0),
+      entries: entries.map((e, i) => ({ binding: i, resource: e.buffer ? e : { buffer: e } })),
+    });
+  }
+
+  // ── Run-time LoRA (engines/lora.js) ──
+  // An engine registers each matmul an adapter may follow as it binds it: the matrix's tensor name, its layer and
+  // site (the key encodeLora / encodeLoraB look up), and its input and output for one token (y may be a range);
+  // loraIoB adds the chunk's input and output in initBatch.
+  loraIo(tensor, layer, site, x, y) { this.loraSites.set(tensor, { layer, site, d: [x, y], bt: null }); }
+  loraIoB(tensor, x, y) { this.loraSites.get(tensor).bt = [x, y]; }
+  // Reads a LoRA GGUF (a URL, Blob or bytes) onto the GPU; switch it on with setAdapter().
+  loadAdapter(source, opts) { return loadLora(this, source, opts); }
+  // The adapter for the next turns (null: the plain model). The cached prompt was computed with the old weights, so
+  // the next turn starts from token 0.
+  async setAdapter(adapter) {
+    const release = await this.acquire();
+    try { this.adapter = adapter || null; this.reset(); } finally { release(); }
+  }
+  encodeLora(pass, layer, site) {
+    const e = this.adapter && this.adapter.sites.get(`${layer}:${site}`);
+    if (!e) return;
+    this.dispatch(pass, 'loraA', e.a, e.r);
+    this.dispatch(pass, 'loraB', e.b, Math.ceil(e.M / 256));
+  }
+  encodeLoraB(pass, layer, site, T) {
+    const e = this.adapter && this.adapter.sites.get(`${layer}:${site}`);
+    if (!e) return;
+    this.dispatch(pass, 'loraAT', e.aB, e.r, T);
+    this.dispatch(pass, 'loraBT', e.bB, Math.ceil(e.M / 256), T);
   }
 
   async init(onProgress) {
@@ -1074,6 +1113,9 @@ export class Qwen3MoeSsd {
     this.layers = [];
     for (let l = 0; l < c.layers; l++) {
       const p = (n) => W[`blk.${l}.${n}.weight`];
+      for (const [t, site, x, y] of [['attn_q', 'q', a.xn, a.q], ['attn_k', 'k', a.xn, a.k], ['attn_v', 'v', a.xn, a.v], ['attn_output', 'o', a.att, a.o]]) {
+        this.loraIo(`blk.${l}.${t}.weight`, l, site, x, y);
+      }
       this.layers.push({
         rmsA: this.bind('rmsnorm', [a.x, p('attn_norm').raw, a.xn, u.rmsH]),
         q: this.bind('matmulQ8', [a.xn, p('attn_q').q, p('attn_q').s, a.q, u.mmQ]),
@@ -1127,12 +1169,14 @@ export class Qwen3MoeSsd {
     const QN = c.heads * c.headDim, kvn = c.kvHeads * c.headDim;
     d('rmsnorm', g.rmsA, 1);
     d('matmulQ8', g.q, Math.ceil(QN / 4)); d('matmulQ8', g.k, Math.ceil(kvn / 4)); d('matmulQ8', g.v, Math.ceil(kvn / 4));
+    this.encodeLora(pass, l, 'q'); this.encodeLora(pass, l, 'k'); this.encodeLora(pass, l, 'v');
     d('qkNormRope', g.ropeQ, c.heads); d('qkNormRope', g.ropeK, c.kvHeads);
     d('kvStore', g.kv, Math.ceil(kvn / 256));
     d('attnScore', g.score, Math.ceil(c.heads * seqLen / 256));
     d('softmax', g.soft, c.heads);
     d('attnOut', g.attOut, Math.ceil(QN / 256));
     d('matmulQ8', g.o, Math.ceil(c.hidden / 4));
+    this.encodeLora(pass, l, 'o');
     d('addInPlace', g.addO, Math.ceil(c.hidden / 256));
     if (this.prefetch) for (const p of g.pf) { d('rmsnorm', p.rms, 1); d('matmulF32', p.router, c.experts); d('topk', p.topk, 1); }
     d('rmsnorm', g.rmsF, 1);

@@ -1,0 +1,126 @@
+{
+ "about": "llama.cpp b11669 (620d2225c), Metal (-ngl 99), LoRA gemma4-26b-random-lora.gguf (scripts/make-test-lora.py, seed 0) loaded with --lora-init-without-apply, scale 1 per request: llama-server /completion on the /apply-template prompt, temperature 0, max_tokens 64, on gemma-4-26B_q4_0-it.gguf (sha256 3eca3b8f6d7baf218a7dd6bba5fb59a56ee25fe2d567b6f5f589b4f697eca51d). Recorded 2026-10-31 by scripts/record-refs.mjs.",
+ "conversations": [
+  {
+   "name": "explain-tcp",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Explain the difference between TCP and UDP to a new programmer."
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nExplain the difference between TCP and UDP to a new programmer.<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\n\n*   *Target Audience:* A new programmer (needs clear analogies, simple language, and foundational concepts, but shouldn't be patronizing).\n*   *Topic:* Difference between TCP (Transmission Control Protocol) and UDP (User Datagram Protocol).\n*   *Goal:* Explain what they are",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "json-extract",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Extract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\""
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nExtract the name, city and age from this sentence as JSON: \"Priya, 34, moved from Pune to Lisbon last year.\"<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\n*   Input sentence: \"Priya, 34, moved from Pune to Lisbon last year.\"\n    *   Task: Extract \"name\", \"",
+   "finish": "stop",
+   "tokens": 35
+  },
+  {
+   "name": "translate-hi",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Translate into Hindi: \"The library opens at nine and closes at six.\""
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nTranslate into Hindi: \"The library opens at nine and closes at six.\"<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\n\n*   Source sentence: \"The library opens at nine and closes at six.\"\n*   Subject: The library (पुस्तकालय - pustakalaya).\n*   Verb 1: opens (खुलता है - khulta hai).\n*   Time 1: at nine (नौ",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "word-problem",
+   "messages": [
+    {
+     "role": "user",
+     "content": "A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly."
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nA train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\n*   Departure time: 14:10\n    *   Arrival time: 17:45\n    *   Goal: Calculate the duration of the journey.\n    *   Constraint: Show steps briefly.\n\n    *   Method 1: Subtraction (Hours and Minutes",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "sql",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount)."
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nWrite a SQL query that returns the five customers with the highest total order value from tables customers(id, name) and orders(id, customer_id, amount).<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\n\n*   Goal: Find the top 5 customers based on their total order value.\n*   Tables:\n    *   `customers` (columns: `id`, `name`)\n    *   `orders` (columns: `id`, `customer_id`, `amount`)\n*",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "list-rivers",
+   "messages": [
+    {
+     "role": "user",
+     "content": "List five major rivers of Africa, one per line, with the country where each reaches the sea."
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nList five major rivers of Africa, one per line, with the country where each reaches the sea.<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\n*   Topic: Five major rivers of Africa.\n    *   Format: One river per line.\n    *   Content",
+   "finish": "stop",
+   "tokens": 29
+  },
+  {
+   "name": "unicode",
+   "messages": [
+    {
+     "role": "user",
+     "content": "What do these emoji usually mean in a text message: 🙏 🔥 💀 ?"
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nWhat do these emoji usually mean in a text message: 🙏 🔥 💀 ?<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\n\n*   Emoji 1: 🙏 (Folded Hands)\n*   Emoji 2: 🔥 (Fire)\n*   Emoji 3: 💀 (Skull)\n*   Context: Text messages (informal communication).\n\n    *   *Literal meaning:* Praying, high five,",
+   "finish": "stop",
+   "tokens": 64
+  },
+  {
+   "name": "haiku-autumn",
+   "messages": [
+    {
+     "role": "user",
+     "content": "Write a haiku about autumn leaves in a city."
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nWrite a haiku about autumn leaves in a city.<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\n*   Topic: Autumn leaves in a city.\n    *   Format: Haiku",
+   "finish": "stop",
+   "tokens": 21
+  },
+  {
+   "name": "system-pirate",
+   "messages": [
+    {
+     "role": "system",
+     "content": "Answer like a cheerful pirate, in two sentences."
+    },
+    {
+     "role": "user",
+     "content": "What is the boiling point of water at sea level?"
+    }
+   ],
+   "prompt": "<|turn>system\n<|think|>\nAnswer like a cheerful pirate, in two sentences.<turn|>\n<|turn>user\nWhat is the boiling point of water at sea level?<turn|>\n<|turn>model\n",
+   "content": "<|channel>thought\n*   Topic: Boiling point of water at sea level.\n    *   Persona: Cheerful pirate.\n    *   Constraint 1: Two sentences.\n    *   Constraint",
+   "finish": "stop",
+   "tokens": 41
+  }
+ ]
+}

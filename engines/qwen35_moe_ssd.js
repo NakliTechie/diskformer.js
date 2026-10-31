@@ -902,6 +902,13 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
     for (let l = 0; l < c.layers; l++) {
       const n = (t) => `blk.${l}.${t}`;
       const g = { recur: this.recurrent[l], rmsA: this.bind('rmsnorm', [a.x, raw(n('attn_norm.weight')), a.xn, u.rmsH]) };
+      // run-time LoRA hooks (engines/lora.js): the DeltaNet or attention projections and the shared expert
+      const hooks = g.recur
+        ? [['attn_qkv', 'qkv', a.xn, a.mixed], ['attn_gate', 'z', a.xn, a.z], ['ssm_beta', 'beta', a.xn, a.bb], ['ssm_alpha', 'alpha', a.xn, a.al], ['ssm_out', 'out', a.gn, a.o]]
+        : [['attn_q', 'q', a.xn, a.qg], ['attn_k', 'k', a.xn, a.k], ['attn_v', 'v', a.xn, a.v], ['attn_output', 'o', a.att, a.o]];
+      hooks.push(['ffn_gate_shexp', 'shg', a.xn, { buffer: a.shgu, offset: 0, size: SF * 4 }],
+        ['ffn_up_shexp', 'shu', a.xn, { buffer: a.shgu, offset: SF * 4, size: SF * 4 }], ['ffn_down_shexp', 'shd', a.shact, a.sh]);
+      for (const [t, site, x, y] of hooks) this.loraIo(n(`${t}.weight`), l, site, x, y);
       if (g.recur) {
         Object.assign(g, {
           qkv: q8(n('attn_qkv.weight'), a.xn, a.mixed, u.qkv),
@@ -997,6 +1004,11 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
     this.gB = { embed: this.bind(QK.embB, [W['token_embd.weight'].q, W['token_embd.weight'].s, b.ids, b.x, u.nH, qb]) };
     for (let l = 0; l < c.layers; l++) {
       const n = (t) => `blk.${l}.${t}`, g = { rmsA: this.bind('rmsnormB', [b.x, raw(n('attn_norm.weight')), b.xn, u.rmsH]) };
+      const hooks = this.recurrent[l]
+        ? [['attn_qkv', b.xn, b.mixed], ['attn_gate', b.xn, b.z], ['ssm_beta', b.xn, b.bb], ['ssm_alpha', b.xn, b.al], ['ssm_out', b.gn, b.o]]
+        : [['attn_q', b.xn, b.qg], ['attn_k', b.xn, b.k], ['attn_v', b.xn, b.v], ['attn_output', b.att, b.o]];
+      hooks.push(['ffn_gate_shexp', b.xn, b.shg], ['ffn_up_shexp', b.xn, b.shu], ['ffn_down_shexp', b.shact, b.sh]);
+      for (const [t, x, y] of hooks) this.loraIoB(n(`${t}.weight`), x, y);
       if (this.recurrent[l]) {
         Object.assign(g, {
           qkv: q8(n('attn_qkv.weight'), b.xn, b.mixed, u.qkv), z: q8(n('attn_gate.weight'), b.xn, b.z, u.z),
@@ -1046,12 +1058,15 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
     if (this.recurrent[l]) {
       d(this.qk.mmT, g.qkv, mm(convDim), tt); d(this.qk.mmT, g.z, mm(s.dInner), tt);
       d(this.qk.mmT, g.beta, mm(s.vHeads), tt); d(this.qk.mmT, g.alpha, mm(s.vHeads), tt);
+      for (const site of ['qkv', 'z', 'beta', 'alpha']) this.encodeLoraB(pass, l, site, T);
       d('gdnConvB', g.conv, Math.ceil(convDim / 256));
       d('gdnStepB', g.step, s.vHeads);
       d('gdnNormGateB', g.norm, s.vHeads, T);
       d(this.qk.mmT, g.out, mm(H), tt);
+      this.encodeLoraB(pass, l, 'out', T);
     } else {
       d(this.qk.mmT, g.q, mm(2 * QN), tt); d(this.qk.mmT, g.k, mm(kvn), tt); d(this.qk.mmT, g.v, mm(kvn), tt);
+      for (const site of ['q', 'k', 'v']) this.encodeLoraB(pass, l, site, T);
       d('qkNormRopePB', g.ropeQ, c.heads, T); d('qkNormRopePB', g.ropeK, c.kvHeads, T);
       d('kvStoreB', g.kv, Math.ceil(kvn / 256), T);
       d('attnScorePosB', g.score, Math.ceil(c.heads * T * S / 256));
@@ -1059,14 +1074,17 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
       d('attnOutPosB', g.attOut, Math.ceil(QN / 256), T);
       d('sigmoidMulB', g.gate, Math.ceil(QN / 256), T);
       d(this.qk.mmT, g.o, mm(H), tt);
+      this.encodeLoraB(pass, l, 'o', T);
     }
     d('addInPlaceB', g.addO, Math.ceil(H / 256), T);
     d('rmsnormB', g.rmsF, T);
     d('matmulF32T', g.router, c.experts, T);
     d('topkB', g.topk, T);
     d(this.qk.mmT, g.shg, mm(c.shexpFf), tt); d(this.qk.mmT, g.shu, mm(c.shexpFf), tt);
+    this.encodeLoraB(pass, l, 'shg', T); this.encodeLoraB(pass, l, 'shu', T);
     d('siluMul2B', g.shact, Math.ceil(c.shexpFf / 256), T);
     d(this.qk.mmT, g.shd, mm(H), tt);
+    this.encodeLoraB(pass, l, 'shd', T);
     d('matmulF32T', g.shgate, 1, T);
   }
 
@@ -1169,12 +1187,15 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
     if (g.recur) {
       d(this.qk.mm, g.qkv, Math.ceil(convDim / 4)); d(this.qk.mm, g.z, Math.ceil(s.dInner / 4));
       d(this.qk.mm, g.beta, Math.ceil(s.vHeads / 4)); d(this.qk.mm, g.alpha, Math.ceil(s.vHeads / 4));
+      for (const site of ['qkv', 'z', 'beta', 'alpha']) this.encodeLora(pass, l, site);
       d('gdnConv', g.conv, Math.ceil(convDim / 256));
       d('gdnStep', g.step, s.vHeads);
       d('gdnNormGate', g.norm, s.vHeads);
       d(this.qk.mm, g.out, Math.ceil(H / 4));
+      this.encodeLora(pass, l, 'out');
     } else {
       d(this.qk.mm, g.q, Math.ceil(2 * QN / 4)); d(this.qk.mm, g.k, Math.ceil(kvn / 4)); d(this.qk.mm, g.v, Math.ceil(kvn / 4));
+      for (const site of ['q', 'k', 'v']) this.encodeLora(pass, l, site);
       d('qkNormRopeP', g.ropeQ, c.heads); d('qkNormRopeP', g.ropeK, c.kvHeads);
       d('kvStore', g.kv, Math.ceil(kvn / 256));
       d('attnScore', g.score, Math.ceil(c.heads * seqLen / 256));
@@ -1182,6 +1203,7 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
       d('attnOut', g.attOut, Math.ceil(QN / 256));
       d('sigmoidMul', g.gate, Math.ceil(QN / 256));
       d(this.qk.mm, g.o, Math.ceil(H / 4));
+      this.encodeLora(pass, l, 'o');
     }
     d('addInPlace', g.addO, Math.ceil(H / 256));
     if (this.prefetch) for (const p of g.pf) { d('rmsnorm', p.rms, 1); d('matmulF32', p.router, c.experts); d('topk', p.topk, 1); }
@@ -1189,8 +1211,10 @@ export class Qwen35MoeSsd extends Qwen3MoeSsd {
     d('matmulF32', g.router, c.experts);
     d('topk', g.topk, 1);
     d(this.qk.mm, g.shg, Math.ceil(c.shexpFf / 4)); d(this.qk.mm, g.shu, Math.ceil(c.shexpFf / 4));
+    this.encodeLora(pass, l, 'shg'); this.encodeLora(pass, l, 'shu');
     d('siluMulMoe', g.shsilu, Math.ceil(c.shexpFf / 256));
     d(this.qk.mm, g.shd, Math.ceil(H / 4));
+    this.encodeLora(pass, l, 'shd');
     d('matmulF32', g.shgate, 1);
   }
 
