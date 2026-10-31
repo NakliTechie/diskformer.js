@@ -20,7 +20,7 @@ const STORE = [['opfs-reader.js', 'opfs-reader.js'], ['expert-stream.js', 'moe-e
 // MoE paging, dense layer streaming, the Bonsai 2 drafters, the FlashMap drafter, and the shared kernels they import.
 const ENGINES = ['qwen3_moe_ssd.js', 'qwen35_moe_ssd.js', 'gemma4_moe_ssd.js', 'minicpmv_vision.js', 'lfm2_moe_ssd.js',
   'hy_v3_moe_ssd.js', 'flint_moe_ssd.js', 'iq_quants.js', 'flashmap_drafter.js', 'qwen35_dense.js', 'ple-opfs.js',
-  'ternary_bonsai_2_dflash.js', 'ternary_bonsai_2_mtp.js', 'ling_moe_ssd.js',
+  'ternary_bonsai_2_dflash.js', 'ternary_bonsai_2_mtp.js', 'ling_moe_ssd.js', 'subgroup-matrix-guard.js',
   // from webml-community Hugging Face Spaces whose code Chirag wrote and released under MIT (2026-10-23)
   'lfm2_5.js', 'gemma-4-e2b.js', 'ternary_bonsai_2_27b.js'];
 // diskformer's src/ paths → LocalMind's sibling paths, in import and export-from statements.

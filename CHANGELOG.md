@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.16 (2026-10-31)
+- Chrome 156 fix: Ternary Bonsai 2 27B, Gemma 4 E2B, LFM2.5 and the IQ-quant dense path failed to load on Apple GPUs
+  with "Mixed precision subgroup matrix multiply is not supported by the device". Their prefill kernels multiply f16
+  subgroup matrices into an f32 result; Apple reports only f16-f16 and f32-f32 configurations, and Dawn stopped
+  compiling the mixed pair in Chrome 156. New `engines/subgroup-matrix-guard.js` compiles one tiny mixed kernel on
+  the first adapter request and, when that fails, hides `chromium-experimental-subgroup-matrix` from the adapter, so
+  those engines take their existing non-matrix prefill path (slower prefill, same output path as GPUs without
+  subgroup matrices). Imported by `ternary_bonsai_2_27b.js`, `gemma-4-e2b.js`, `lfm2_5.js` and `qwen3_moe_ssd.js`.
+  No other engine uses subgroup matrices. Synced to LocalMind with the other engine files.
+
 ## 0.6.15 (2026-10-30)
 - Clover-35B-A3B-Preview (Diffuspace, Apache-2.0), a block-diffusion model on Qwen3.6-35B-A3B, from the SSD:
   `engines/clover_moe_ssd.js` (`CloverMoeSsd`, GGUF arch `clover_moe`; pinned to the authors' Q4_0 file, 19.6 GB,

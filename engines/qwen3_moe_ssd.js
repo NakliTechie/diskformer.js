@@ -26,6 +26,7 @@ import { ExpertStreamer } from '../src/expert-stream.js';
 import { GGML, Q8_BLOCK, Q4_BLOCK, Q6K_BLOCK, parseGguf, tensorBytes } from '../src/gguf.js';
 import { ingestGguf as ingestStore, ingestProgress, fileFetch, storeKey, readStore, removeStore } from '../src/ingest.js';
 import { DiskformerError, isDiskformerError, codedError } from '../src/errors.js';
+import './subgroup-matrix-guard.js'; // qwen35_dense.js and iq_quants.js build mixed f16/f32 subgroup-matrix kernels on this device
 export { GGML, Q4_BLOCK, Q6K_BLOCK, parseGguf, tensorBytes, splitQ4 } from '../src/gguf.js';
 export { ingestProgress } from '../src/ingest.js';
 
