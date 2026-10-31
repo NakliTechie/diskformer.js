@@ -4,29 +4,41 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>diskformer LoRA switch</title>
-<meta name="description" content="LFM2.5-24B-A2B (13.6 GB) in a browser tab, with harness-hub's Pi coding-agent LoRA switched on and off at run time: no reload, no second download.">
+<meta name="description" content="Mixture-of-experts models of 13.6 to 36.9 GB in a browser tab, with trained LoRA adapters switched on and off at run time: no reload, no second download. Or load your own adapter.">
 <style>
-  :root { --bg: #fafaf9; --fg: #1c1917; --muted: #78716c; --line: #e7e5e4; --card: #fff; --accent: #2563eb; --pi: #7c3aed; --bad: #b91c1c; }
+  :root { --bg: #fafaf9; --fg: #1c1917; --muted: #78716c; --line: #e7e5e4; --card: #fff; --accent: #2563eb; --ad: #7c3aed; --bad: #b91c1c; }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; }
   main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
   h1 { font-size: 22px; margin: 0 0 6px; }
+  h2 { font-size: 15px; margin: 0 0 8px; }
   p { margin: 0 0 12px; }
+  a { color: var(--accent); }
   .muted { color: var(--muted); }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 14px 0; }
   .row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
-  textarea, button { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; }
+  select, input, textarea, button { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; }
+  input[type=url] { flex: 1; min-width: 220px; }
   textarea { width: 100%; resize: vertical; min-height: 64px; }
   button { cursor: pointer; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   button:disabled { opacity: .5; cursor: default; }
-  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
   .seg button { border: 0; border-radius: 0; background: var(--card); padding: 7px 14px; }
   .seg button[aria-pressed=true] { background: var(--fg); color: var(--bg); }
-  .seg button.pi[aria-pressed=true] { background: var(--pi); }
+  .seg button.ad[aria-pressed=true] { background: var(--ad); }
   .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 10px 0 6px; }
   .bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
   #status.bad { color: var(--bad); }
+  .adapters { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .adapters td { padding: 6px; border-top: 1px solid var(--line); vertical-align: top; }
+  .adapters td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .adapters td.src { white-space: nowrap; }
+  @media (max-width: 560px) {
+    .adapters tr { display: grid; grid-template-columns: 1fr auto auto; border-top: 1px solid var(--line); }
+    .adapters td { border-top: 0; }
+    .adapters td:first-child { grid-column: 1 / -1; padding-bottom: 0; }
+  }
   .meter { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
   .meter div { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
   .meter b { display: block; font-size: 20px; }
@@ -34,33 +46,49 @@
   .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
   .reply { border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; background: var(--card); }
   .reply h3 { font-size: 13px; margin: 0 0 6px; color: var(--muted); font-weight: 600; }
-  .reply.pi h3 { color: var(--pi); }
+  .reply.ad h3 { color: var(--ad); }
   .reply .think { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); font-size: 13px; border-left: 2px solid var(--line); padding-left: 8px; margin-bottom: 8px; }
+  .reply .think:empty { display: none; }
   .reply .answer { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .call { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .call td, .call th { padding: 4px 6px; border-top: 1px solid var(--line); text-align: left; }
   footer { font-size: 12px; color: var(--muted); margin-top: 24px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>One model, two behaviours: a LoRA switched at run time</h1>
-  <p>LiquidAI's LFM2.5-24B-A2B (13.6 GB) answers in this tab, with its 64 experts per layer read from disk as each
-    token needs them. harness-hub's Pi adapter (rank 32, 37 MB) was trained for a coding agent. Here it sits on the GPU
-    beside the model and is switched on or off between replies: no reload, no second download of the model.</p>
-  <p class="muted">Chromium with WebGPU and about 6 GB of free GPU memory. Nothing leaves this tab except the two
-    downloads from Hugging Face.</p>
+  <h1>One model, several behaviours: LoRA adapters switched at run time</h1>
+  <p>A mixture-of-experts model answers in this tab, with its experts read from disk as each token needs them. A LoRA
+    adapter (a few to a few hundred MB, trained by someone for one job) sits on the GPU beside the model and is switched
+    on or off between replies: no reload, no second download of the model.</p>
+  <p class="muted">Chromium with WebGPU and about 6 GB of free GPU memory. Nothing leaves this tab except the downloads
+    from Hugging Face. The adapters are other people's work, linked to their own pages.</p>
 
   <section class="card">
     <div class="row">
+      <label>Model <select id="model"></select></label>
       <button id="load" class="primary">Download and load</button>
-      <span class="muted">13.6 GB once into this browser's storage, then the 37 MB adapter.</span>
     </div>
     <div class="bar"><span id="fill"></span></div>
-    <p id="status" class="muted">Not loaded.</p>
+    <p id="status" class="muted">Pick a model. The first load downloads it once into this browser's storage.</p>
+  </section>
+
+  <section class="card" id="adCard">
+    <h2>Adapters for this model</h2>
+    <table class="adapters" id="adList"></table>
+    <div class="row" style="margin-top:10px">
+      <input id="ownUrl" type="url" placeholder="Your own: URL of a LoRA GGUF for this model (llama.cpp format)">
+      <button id="ownLoad">Load URL</button>
+      <label class="muted">or a file <input id="ownFile" type="file" accept=".gguf"></label>
+    </div>
+    <p class="muted" style="margin:8px 0 0">Load the model above first; then each adapter downloads once and stays on the
+      GPU until you change model. Adapters must be llama.cpp LoRA GGUFs (F16, F32 or BF16) for this exact
+      model. Adapters on the routed experts are refused.</p>
   </section>
 
   <section class="card" id="meterCard" hidden>
     <div class="meter">
-      <div><b id="mAdapter">–</b><span>adapter on the GPU</span></div>
+      <div><b id="mAdapters">–</b><span>adapters on the GPU</span></div>
       <div><b id="mSwitch">–</b><span>last switch</span></div>
       <div><b id="mSpeed">–</b><span>decode speed, last reply</span></div>
     </div>
@@ -68,90 +96,179 @@
 
   <section class="card" id="askCard" hidden>
     <div class="row" style="margin-bottom:10px">
-      <div class="seg" role="group" aria-label="Adapter">
-        <button id="mPlain" aria-pressed="true">Plain model</button>
-        <button id="mPi" class="pi" aria-pressed="false">Pi adapter</button>
-      </div>
+      <div class="seg" role="group" aria-label="Adapter" id="modes"></div>
       <span class="muted">The switch applies to the next reply.</span>
     </div>
-    <textarea id="q">Write a bash one-liner that counts the lines in every .py file under src/, then explain it in one sentence.</textarea>
+    <textarea id="q"></textarea>
     <div class="row" style="margin-top:10px">
       <button id="ask" class="primary">Ask</button>
-      <button id="both">Ask both, side by side</button>
+      <button id="both">Ask plain and adapter, side by side</button>
       <button id="stop" disabled>Stop</button>
     </div>
   </section>
 
   <section class="cols" id="out"></section>
 
-  <footer>Greedy decoding, so the same question gets the same answer. The engine applies y += scale · B(A·x) after
-    each of the 106 adapted matrices; with the adapter on, its replies match llama.cpp's <code>llama-server --lora</code>
-    in 9 of 9 gate prompts. Engines: <a href="https://github.com/NakliTechie/diskformer.js">diskformer.js</a>.
-    Model and adapter: LFM Open License v1.0 (Liquid AI; adapter by harness-hub).</footer>
+  <footer>Greedy decoding, so the same question gets the same answer. The engine adds scale · B(A·x) after each
+    adapted matrix, as llama.cpp's <code>--lora</code> does; diskformer gates every engine against
+    <code>llama-server --lora</code>. Engines: <a href="https://github.com/NakliTechie/diskformer.js">diskformer.js</a>.
+    Model terms: LFM Open License v1.0 (Liquid AI), Gemma (ai.google.dev/gemma/terms), Qwen3.6 (Apache-2.0).</footer>
 </main>
 
 <script type="module">
 import { Lfm2MoeSsd } from '../../engines/lfm2_moe_ssd.js';
+import { Gemma4MoeSsd } from '../../engines/gemma4_moe_ssd.js';
+import { Qwen35MoeSsd } from '../../engines/qwen35_moe_ssd.js';
 
-// ?url=<GGUF> and ?adapter=<LoRA GGUF>: local copies, honoured only on this machine. ?auto=1 loads and asks both ways
-// (window.result), for a headless check.
-const ADAPTER = 'https://huggingface.co/harness-hub/LFM2.5-24B-A2B-pi-GGUF/resolve/a994cf7f03ab0e572832d5829f42cbe2ef28d472/LFM2.5-24B-A2B-harbor-pi-lora-F16.gguf';
+const HF = (repo, rev, file) => `https://huggingface.co/${repo}/resolve/${rev}/${file}`;
+const AGENT = 'Write a bash one-liner that counts the lines in every .py file under src/, then explain it in one sentence.';
+const TOOLS = 'You can call one tool, get_weather(city: string). A user asks: "Is it warmer in Pune or in Lisbon right now?" Say which tool calls you would make and in what order, then how you would answer once they return.';
+const REASON = 'A train leaves at 14:10 and arrives at 17:45. How long is the journey? Show the steps briefly.';
+// The adapters on offer: trained ones, published by their authors as llama.cpp LoRA GGUFs, fetched from their own
+// repositories at a pinned revision. kind 'call' runs a scripted voice call (MicroTurn's trained prompt format).
+const MODELS = {
+  lfm2: {
+    label: 'LFM2.5 24B-A2B · 13.6 GB', Engine: Lfm2MoeSsd, opts: { poolBytes: 4 * 2 ** 30 },
+    adapters: [
+      { id: 'pi', name: 'Pi coding agent', by: 'harness-hub', repo: 'harness-hub/LFM2.5-24B-A2B-pi-GGUF', url: HF('harness-hub/LFM2.5-24B-A2B-pi-GGUF', 'a994cf7f03ab0e572832d5829f42cbe2ef28d472', 'LFM2.5-24B-A2B-harbor-pi-lora-F16.gguf'), mb: 37.4, licence: 'LFM 1.0',
+        what: 'RL-trained inside the Pi coding agent; the authors report 39% fewer tool calls at about the same pass rate.', prompt: AGENT },
+      { id: 'cc', name: 'Claude Code agent', by: 'harness-hub', repo: 'harness-hub/LFM2.5-24B-A2B-claude-code-GGUF', url: HF('harness-hub/LFM2.5-24B-A2B-claude-code-GGUF', 'd99731e', 'LFM2.5-24B-A2B-harbor-claude-code-lora-F16.gguf'), mb: 37.4, licence: 'LFM 1.0',
+        what: 'RL-trained inside Claude Code; its card reports no measured change from the base model.', prompt: AGENT },
+    ],
+  },
+  gemma: {
+    label: 'Gemma 4 26B-A4B · 14.4 GB', Engine: Gemma4MoeSsd, opts: { gpuBudgetBytes: 3e9 },
+    adapters: [
+      { id: 'hermes', name: 'Hermes tool-use reasoning', by: 'hotdogs', repo: 'hotdogs/gemma4-26b-hermes-tool-reasoning-lora', url: HF('hotdogs/gemma4-26b-hermes-tool-reasoning-lora', 'baa8f20', 'gguf/hotdogs_gemma4-26b-hermes-tool-reasoning-lora.gguf'), mb: 148.7, licence: 'Apache-2.0',
+        what: 'Tool-calling conversations with reasoning (10K from interstellarninja/hermes_reasoning_tool_use).', prompt: TOOLS },
+      { id: 'fc', name: 'Function calling + thinking', by: 'hotdogs', repo: 'hotdogs/gemma4-26b-fc-thinking-reasoning-lora', url: HF('hotdogs/gemma4-26b-fc-thinking-reasoning-lora', 'ee10d41', 'gguf/hotdogs_gemma4-26b-fc-thinking-reasoning-lora.gguf'), mb: 148.7, licence: 'Apache-2.0',
+        what: 'Function calls with a thinking step (Jofthomas/hermes-function-calling-thinking-V1).', prompt: TOOLS },
+      { id: 'kimi', name: 'Kimi K2 reasoning', by: 'hotdogs', repo: 'hotdogs/gemma4-26b-kimi-k2-reasoning-lora', url: HF('hotdogs/gemma4-26b-kimi-k2-reasoning-lora', '1a0893b', 'gguf/hotdogs_gemma4-26b-kimi-k2-reasoning-lora.gguf'), mb: 148.7, licence: 'Apache-2.0',
+        what: 'Reasoning traces distilled from Kimi K2 (lordx64/reasoning-distill-kimi-k2-6-max-sft).', prompt: REASON },
+      { id: 'opus', name: 'Opus reasoning style', by: 'hotdogs', repo: 'hotdogs/gemma4-26b-opus-lora', url: HF('hotdogs/gemma4-26b-opus-lora', '3bae4ce', 'gguf/adapter_model.gguf'), mb: 18.6, licence: 'Apache-2.0',
+        what: 'A small (rank 8) adapter distilled toward Claude Opus-style reasoning.', prompt: REASON },
+    ],
+  },
+  qwen35: {
+    label: 'Qwen3.6 35B-A3B · 36.9 GB', Engine: Qwen35MoeSsd, opts: { gpuBudgetBytes: 4e9 },
+    adapters: [
+      { id: 'duplex', name: 'MicroTurn duplex voice', by: 'codacus', repo: 'codacus/Qwen3.6-35B-A3B-MicroTurn-Duplex-LoRA', url: HF('codacus/Qwen3.6-35B-A3B-MicroTurn-Duplex-LoRA', 'f423b29', 'microturn-duplex-lora.gguf'), mb: 15.3, licence: 'Apache-2.0',
+        what: 'Takes part in a live call: every 0.6 s it reads what the microphone heard and says up to three words, or waits. Ask runs a scripted call: with the adapter it waits through the pauses and answers once the question ends; the plain model never speaks in this format.', kind: 'call' },
+    ],
+  },
+};
+// MicroTurn's trained prompt, byte for byte (its microturn_client.py), and a call with a pause mid-sentence.
+const CALL_SYSTEM = 'You are a voice assistant in a live phone call; both sides can talk at the same time. Every 0.6 seconds you get what the microphone heard in that moment, as a streaming transcript fragment, or <no voice>. You reply with up to three new words to say next, or <listen> to add nothing.';
+const CALL_TICKS = ['hi, I wanted', 'to ask about', '<no voice>', 'the train', 'to Pune tomorrow,', 'what time is', '<no voice>', '<no voice>', 'the first one?', '<no voice>'];
+
 const q = new URLSearchParams(location.search), local = ['localhost', '127.0.0.1'].includes(location.hostname);
 const $ = (id) => document.getElementById(id);
 const GB = (n) => (n / 1e9).toFixed(2) + ' GB';
-let engine = null, pi = null, mode = 'plain', busy = false, ctrl = null;
+let engine = null, model = null, mode = 'plain', busy = false, ctrl = null;
+const loaded = new Map();   // adapter id -> { spec, handle }
 
+for (const [k, m] of Object.entries(MODELS)) $('model').add(new Option(m.label, k));
+if (MODELS[q.get('model')]) $('model').value = q.get('model');
+$('model').onchange = () => { showAdapters(); controls(); };
 const status = (text, bad = false) => { $('status').textContent = text; $('status').className = bad ? 'bad' : 'muted'; window.progressText = text; };
 const controls = () => {
-  $('load').disabled = busy || !!engine;
-  for (const id of ['ask', 'both', 'mPlain', 'mPi']) $(id).disabled = busy || !engine;
-  $('stop').disabled = !busy || !engine;
+  $('load').disabled = busy; $('model').disabled = busy;
+  for (const id of ['ask', 'both']) $(id).disabled = busy || !engine;
+  for (const id of ['ownLoad', 'ownFile']) $(id).disabled = busy || !engine || model !== $('model').value;
+  for (const b of document.querySelectorAll('#modes button')) b.disabled = busy;
+  for (const b of document.querySelectorAll('#adList button')) b.disabled = busy || !b.dataset.ready;
+  $('stop').disabled = !busy || !ctrl;
+  $('both').disabled ||= mode === 'plain';
 };
 if (!navigator.gpu) status('This page needs WebGPU: Chrome or Edge 121 or later, on a GPU with shader-f16.', true);
 
 async function load() {
   busy = true; controls();
-  const t0 = performance.now();
+  const key = $('model').value, m = MODELS[key], t0 = performance.now();
   try {
-    engine = await Lfm2MoeSsd.load(null, {
-      url: (local && q.get('url')) || undefined, root: 'diskformer', poolBytes: 4 * 2 ** 30, maxCtx: 2048,
+    if (engine) { const old = engine; engine = null; await old.dispose(); }
+    loaded.clear(); mode = 'plain'; $('out').replaceChildren();
+    engine = await m.Engine.load(null, {
+      url: (local && q.get('url')) || undefined, root: q.get('root') || 'diskformer', maxCtx: 2048, ...m.opts,
       onProgress: (e) => {
         if (e.status === 'weights' && e.kind === 'tensors') { $('fill').style.width = `${100 * e.loaded / e.total}%`; status(`Loading the dense layers onto the GPU: ${e.loaded} of ${e.total}`); }
         else if (e.status === 'weights' && e.total) { $('fill').style.width = `${100 * e.loaded / e.total}%`; status(`Downloading into this browser's storage (once): ${GB(e.loaded)} of ${GB(e.total)}`); }
       },
     });
-    status('Loading the Pi adapter');
-    pi = await engine.loadAdapter((local && q.get('adapter')) || ADAPTER);
-    $('fill').style.width = '100%';
-    $('mAdapter').textContent = `${(pi.bytes / 1e6).toFixed(1)} MB`;
+    model = key; $('fill').style.width = '100%';
+    status(`${m.label.split(' · ')[0]} loaded in ${((performance.now() - t0) / 1000).toFixed(1)} s. Load an adapter below.`);
     $('meterCard').hidden = false; $('askCard').hidden = false;
-    status(`Loaded in ${((performance.now() - t0) / 1000).toFixed(1)} s. Pi adapter: rank ${pi.rank}, ${pi.matrices} matrices.`);
+    showAdapters(); showModes();
+    $('q').value = m.adapters[0].prompt || AGENT;
   } catch (e) { status(`Could not load: ${e.message}`, true); throw e; }
   finally { busy = false; controls(); }
 }
 
-async function setMode(m) {
-  const t0 = performance.now();
-  await engine.setAdapter(m === 'pi' ? pi : null);
-  mode = m;
-  $('mPlain').setAttribute('aria-pressed', m === 'plain'); $('mPi').setAttribute('aria-pressed', m === 'pi');
-  $('mSwitch').textContent = `${(performance.now() - t0).toFixed(1)} ms`;
+// The adapters for the model in the picker, shown before it loads; their Load buttons work once it is the loaded one.
+function showAdapters() {
+  const key = $('model').value, ready = !!engine && model === key;
+  $('adList').replaceChildren(...MODELS[key].adapters.map((a) => {
+    const tr = document.createElement('tr'), td = (html, cls) => { const c = tr.insertCell(); c.innerHTML = html; if (cls) c.className = cls; return c; };
+    td(`<b>${a.name}</b><br><span class="muted">${a.what}</span>`);
+    td(`<a href="https://huggingface.co/${a.repo}" target="_blank" rel="noopener">${a.by}</a><br><span class="muted">${a.licence}</span>`, 'src');
+    td(`${a.mb} MB`, 'num');
+    const b = document.createElement('button'); b.textContent = loaded.has(a.id) ? 'Loaded' : 'Load';
+    b.dataset.ready = ready ? '1' : '';
+    b.onclick = () => addAdapter(a, a.url);
+    tr.insertCell().append(b);
+    return tr;
+  }));
+}
+function showModes() {
+  const mk = (id, label, cls) => {
+    const b = document.createElement('button'); b.textContent = label; if (cls) b.className = cls;
+    b.setAttribute('aria-pressed', id === mode); b.onclick = () => setMode(id); return b;
+  };
+  $('modes').replaceChildren(mk('plain', 'Plain model'), ...[...loaded].map(([id, { spec }]) => mk(id, spec.name, 'ad')));
+  $('mAdapters').textContent = loaded.size ? `${loaded.size} · ${([...loaded.values()].reduce((x, a) => x + a.handle.bytes, 0) / 1e6).toFixed(0)} MB` : '0';
+  controls();
 }
 
-// One reply in the current mode, streamed into a column: the reasoning (LFM2.5 always reasons first) muted, the answer below.
+// Downloads (or reads) an adapter, puts it on the GPU and switches to it.
+async function addAdapter(spec, source) {
+  if (busy || !engine) return;
+  busy = true; controls();
+  try {
+    status(`Loading the adapter ${spec.name}`);
+    const t0 = performance.now(), handle = await engine.loadAdapter(source);
+    loaded.set(spec.id, { spec, handle });
+    status(`${spec.name}: ${handle.matrices} matrices, rank ${handle.rank}, ${(handle.bytes / 1e6).toFixed(1)} MB on the GPU, ready in ${((performance.now() - t0) / 1000).toFixed(1)} s.`);
+    busy = false; await setMode(spec.id);
+    if (spec.prompt) $('q').value = spec.prompt;
+    showAdapters();
+  } catch (e) { status(`Could not load ${spec.name}: ${e.message}`, true); }
+  finally { busy = false; showModes(); }
+}
+
+async function setMode(id) {
+  const t0 = performance.now();
+  await engine.setAdapter(id === 'plain' ? null : loaded.get(id).handle);
+  mode = id;
+  $('mSwitch').textContent = `${(performance.now() - t0).toFixed(1)} ms`;
+  showModes();
+}
+const modeName = () => (mode === 'plain' ? 'Plain model' : loaded.get(mode).spec.name);
+
+// One reply in the current mode, streamed into a column: reasoning muted (LFM2.5 and Gemma 4 can reason first), then
+// the answer.
 async function ask(text) {
-  const box = document.createElement('div'); box.className = `reply ${mode}`;
+  const box = document.createElement('div'); box.className = `reply ${mode === 'plain' ? '' : 'ad'}`;
   box.innerHTML = '<h3></h3><div class="think"></div><div class="answer"></div>';
-  box.querySelector('h3').textContent = mode === 'pi' ? 'Pi adapter' : 'Plain model';
+  box.querySelector('h3').textContent = modeName();
   $('out').append(box);
   const show = (t) => {
-    const at = t.indexOf('</think>');
-    box.querySelector('.think').textContent = (at < 0 ? t : t.slice(0, at)).trim();
-    box.querySelector('.answer').textContent = at < 0 ? '' : t.slice(at + 8).trim();
+    const end = ['</think>', '<channel|>'].map((s) => [t.indexOf(s), s.length]).find(([i]) => i >= 0);
+    box.querySelector('.think').textContent = end ? t.slice(0, end[0]).replace(/^<\|channel>thought\n?/, '').trim() : '';
+    box.querySelector('.answer').textContent = end ? t.slice(end[0] + end[1]).trim() : t.trim();
   };
   const t0 = performance.now();
   let tFirst = 0, tokens = 0, out = '';
-  for await (const r of engine.generate([{ role: 'user', content: text }], { maxNewTokens: Number(q.get('n') || 512), signal: ctrl.signal })) {
+  for await (const r of engine.generate([{ role: 'user', content: text }], { maxNewTokens: Number(q.get('n') || 512), signal: ctrl.signal, enableThinking: false })) {
     if (!tokens) tFirst = performance.now();
     out = r.text; tokens = r.tokens; show(out);
   }
@@ -160,30 +277,79 @@ async function ask(text) {
   return { mode, text: out, tokens, firstTokenMs: Math.round(tFirst - t0), tokPerSec: +tps.toFixed(2) };
 }
 
+// The scripted call (MicroTurn): each tick is one more user turn of what the microphone heard; the reply is up to
+// three words or <listen>. Raw prompt in the adapter's trained format, greedy, stopped at <|im_end|>, with its
+// client's rule (microturn_client.py): it listens only when tokens starting with "<" hold at least 30% of the first
+// token's probability; below that it bans them and speaks from the best other first token.
+const LISTEN_P = 0.3;
+async function call() {
+  const box = document.createElement('div'); box.className = `reply ${mode === 'plain' ? '' : 'ad'}`;
+  box.innerHTML = '<h3></h3><table class="call"><tr><th>heard</th><th>said</th><th>P(listen)</th></tr></table>';
+  box.querySelector('h3').textContent = modeName();
+  $('out').append(box);
+  const tk = engine.tokenizer, end = tk.ids.get('<|im_end|>'), rows = [], history = [];
+  const text = (ids) => { const stop = ids.indexOf(end); return tk.decode(stop < 0 ? ids : ids.slice(0, stop)).trim(); };
+  for (const heard of CALL_TICKS) {
+    if (ctrl.signal.aborted) break;
+    let prompt = `<|im_start|>system\n${CALL_SYSTEM}<|im_end|>\n`;
+    for (const [role, content] of [...history, ['user', heard]]) prompt += `<|im_start|>${role}\n${content}<|im_end|>\n`;
+    const ids = tk.encode(prompt + '<|im_start|>assistant\n');
+    const g = await engine.greedy(ids, 12, { top: 8 });
+    const first = g.tops[0], isLt = (o) => tk.decode([o.id]).startsWith('<');
+    const pListen = first.filter(isLt).reduce((x, o) => x + Math.exp(o.logprob), 0);
+    let said = text(g.ids);
+    if (said.startsWith('<')) {
+      const alt = first.find((o) => !isLt(o));
+      if (pListen >= LISTEN_P || !alt) said = '<listen>';
+      else said = text([alt.id, ...(await engine.greedy([...ids, alt.id], 11, { top: 1 })).ids]);
+    }
+    history.push(['user', heard], ['assistant', said]);
+    rows.push({ heard, said, pListen: +pListen.toFixed(2) });
+    const tr = box.querySelector('table').insertRow();
+    tr.insertCell().textContent = heard; tr.insertCell().textContent = said; tr.insertCell().textContent = pListen.toFixed(2);
+  }
+  return { mode, rows };
+}
+
 async function run(modes) {
   const text = $('q').value.trim();
-  if (!text || busy) return null;
+  if (busy || !engine) return null;
   busy = true; ctrl = new AbortController(); controls();
   $('out').replaceChildren();
-  const rows = [];
-  try { for (const m of modes) { if (m !== mode) await setMode(m); rows.push(await ask(text)); } }
-  catch (e) { status(`Error: ${e.message}`, true); }
+  const res = [];
+  // a call adapter in the run: every mode in it runs the scripted call, so the plain model is compared on the same ticks
+  const asCall = modes.some((m) => m !== 'plain' && loaded.get(m).spec.kind === 'call');
+  try {
+    for (const m of modes) {
+      if (m !== mode) { busy = false; await setMode(m); busy = true; controls(); }
+      res.push(asCall ? await call() : await ask(text));
+    }
+  } catch (e) { status(`Error: ${e.message}`, true); }
   finally { busy = false; ctrl = null; controls(); }
-  return rows;
+  return res;
 }
 
 $('load').onclick = () => load().catch(() => {});
-$('mPlain').onclick = () => setMode('plain');
-$('mPi').onclick = () => setMode('pi');
 $('ask').onclick = () => run([mode]);
-$('both').onclick = () => run(['plain', 'pi']);
+$('both').onclick = () => { const ad = mode; return run(['plain', ad]); };
 $('stop').onclick = () => { if (ctrl) ctrl.abort(); };
+$('ownLoad').onclick = () => { const u = $('ownUrl').value.trim(); if (u) addAdapter({ id: `url:${u}`, name: u.split('/').pop(), what: '' }, u); };
+$('ownFile').onchange = (e) => { const f = e.target.files[0]; if (f) addAdapter({ id: `file:${f.name}`, name: f.name, what: '' }, f); };
+showAdapters();
 controls();
-window.demo = { load, setMode, run, get engine() { return engine; } };
+window.demo = { load, addAdapter, setMode, run, MODELS, get engine() { return engine; } };
+// ?auto=1&model=<key>&adapter=<id>: load, add that adapter (a local copy with ?adapterUrl=), ask plain / adapter / plain
 if (q.get('auto')) {
-  load().then(() => run(['plain', 'pi', 'plain'])).then((rows) => {
-    window.result = { ok: !!rows && rows.length === 3 && rows.every((r) => r.tokens > 0) && rows[0].text === rows[2].text, switchMs: $('mSwitch').textContent, adapter: { rank: pi.rank, matrices: pi.matrices, bytes: pi.bytes }, rows };
-  }).catch((e) => { window.result = { ok: false, error: e.message }; });
+  (async () => {
+    await load();
+    const spec = MODELS[model].adapters.find((a) => a.id === q.get('adapter')) || MODELS[model].adapters[0];
+    await addAdapter(spec, (local && q.get('adapterUrl')) || spec.url);
+    if (!loaded.has(spec.id)) throw new Error($('status').textContent);
+    const rows = await run(['plain', spec.id, 'plain']);
+    const same = JSON.stringify(rows[0].text ?? rows[0].rows) === JSON.stringify(rows[2].text ?? rows[2].rows);
+    const h = loaded.get(spec.id).handle;
+    window.result = { ok: rows.length === 3 && same, model, adapter: spec.id, matrices: h.matrices, rank: h.rank, bytes: h.bytes, switchMs: $('mSwitch').textContent, plainAgainSame: same, rows };
+  })().catch((e) => { window.result = { ok: false, error: e.message }; });
 }
 </script>
 </body>

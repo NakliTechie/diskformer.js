@@ -5,7 +5,7 @@
 // (scripts/compare-refs.mjs).
 //
 //   node scripts/record-refs.mjs <model.gguf> <out.json> [--port 8799] [--ctx 4096] [--server <llama-server>] [--paged <slots>] [--ngl 0 (CPU)] [--no-stream] [--raw] [--draft <drafter.gguf> --spec-type <t> --draft-max <n>] [--lora <adapter.gguf> [--lora-scale 1]]
-//                                   [--url http://127.0.0.1:8090 [--lora-request <id>:<scale>]]
+//                                   [--url http://127.0.0.1:8090 [--lora-request <id>:<scale>[,<id>:<scale>…]] [--backend <text>]]
 // --lora: a LoRA adapter on the model (--lora, or --lora-scaled with --lora-scale), named in the refs' `about`.
 // --url: record from a llama-server already running on <model.gguf> (shared with another session) instead of starting
 // one; --lora-request sets an adapter it loaded (--lora, --lora-init-without-apply) per request, so one server records
@@ -34,7 +34,8 @@ const loraArgs = lora ? (loraScale ? ['--lora-scaled', lora, loraScale] : ['--lo
 const loraNote = lora ? `, LoRA ${basename(lora)} at scale ${loraScale || 1}` : opt('--lora-request', null) ? `, LoRA id:scale ${opt('--lora-request', null)} per request` : '';
 const drafter = opt('--draft', null) ? `, speculative with ${basename(opt('--draft', null))} (${opt('--spec-type', 'draft-dflash')})` : '';
 const url = opt('--url', null), base = url || `http://127.0.0.1:${port}`;
-const loraReq = opt('--lora-request', null) ? [{ id: +opt('--lora-request', null).split(':')[0], scale: +opt('--lora-request', null).split(':')[1] }] : null;
+// id:scale[,id:scale…]: every adapter the server loaded, so none keeps a scale from an earlier request
+const loraReq = opt('--lora-request', null) ? opt('--lora-request', null).split(',').map((p) => ({ id: +p.split(':')[0], scale: +p.split(':')[1] })) : null;
 const conversations = JSON.parse(readFileSync(new URL('../examples/chat/refs/gemma.json', import.meta.url))).conversations;
 
 const sha256 = () => new Promise((resolve, reject) => {

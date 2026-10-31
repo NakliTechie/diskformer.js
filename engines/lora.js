@@ -75,12 +75,72 @@ ${QB}
 
 const STORAGE = 0x80, COPY_SRC = 0x04, COPY_DST = 0x08;
 
+// Adapter tensors as f16 for the kernels, whatever the file stores. Published adapters come as F16 (llama.cpp's
+// converter default), F32 or BF16; F32 and BF16 round to nearest even f16 here, once, at load.
+const f32 = new Float32Array(1), u32 = new Uint32Array(f32.buffer);
+function f32ToF16(x) {
+  f32[0] = x;
+  const b = u32[0], sign = (b >>> 16) & 0x8000, e = (b >>> 23) & 0xff, m = b & 0x7fffff;
+  if (e === 0xff) return sign | 0x7c00 | (m ? 0x200 : 0);              // inf, nan
+  const he = e - 127 + 15;
+  if (he >= 0x1f) return sign | 0x7c00;                                // overflow: inf
+  if (he <= 0) {                                                       // subnormal or zero
+    if (he < -10) return sign;
+    const mm = m | 0x800000, shift = 14 - he, half = 1 << (shift - 1), r = mm & ((1 << shift) - 1);
+    let v = mm >>> shift;
+    if (r > half || (r === half && (v & 1))) v++;
+    return sign | v;
+  }
+  let v = (he << 10) | (m >>> 13);
+  const r = m & 0x1fff;
+  if (r > 0x1000 || (r === 0x1000 && (v & 1))) v++;                    // may carry into the exponent, as it should
+  return sign | v;
+}
+const TO_F16 = {
+  [GGML.F16]: (bytes, off, n) => bytes.slice(off, off + n * 2),
+  [GGML.F32]: (bytes, off, n) => {
+    const src = new DataView(bytes.buffer, bytes.byteOffset + off, n * 4), out = new Uint16Array(n);
+    for (let i = 0; i < n; i++) out[i] = f32ToF16(src.getFloat32(i * 4, true));
+    return out;
+  },
+  30: (bytes, off, n) => {                                             // GGML_TYPE_BF16: the top 16 bits of an f32
+    const src = new DataView(bytes.buffer, bytes.byteOffset + off, n * 2), out = new Uint16Array(n);
+    for (let i = 0; i < n; i++) { u32[0] = src.getUint16(i * 2, true) << 16; out[i] = f32ToF16(f32[0]); }
+    return out;
+  },
+};
+
+// A whole file from a URL, resumed with a Range request where a connection drops (a slow link cut a 37 MB adapter
+// mid-transfer, as "Failed to fetch"). Up to `tries` attempts.
+async function fetchBytes(url, tries = 5) {
+  const parts = [];
+  let got = 0, total = 0, lastErr = null;
+  for (let t = 0; t < tries; t++) {
+    try {
+      const r = await fetch(url, got ? { headers: { Range: `bytes=${got}-` } } : {});
+      if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
+      if (got && r.status !== 206) { parts.length = 0; got = 0; }             // no resume: start over
+      if (!total) total = got + Number(r.headers.get('content-length') || 0);
+      for (const reader = r.body.getReader(); ;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        parts.push(value); got += value.length;
+      }
+      if (!total || got >= total) break;
+    } catch (e) { lastErr = e; if (/^HTTP [45]/.test(e.message)) throw e; }
+  }
+  if (total && got < total) throw new Error(`download stopped at ${got} of ${total} bytes: ${lastErr && lastErr.message}`);
+  const out = new Uint8Array(got);
+  let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
+  return out;
+}
+
 // Reads a LoRA GGUF onto the engine's GPU and binds it to the matmuls the engine registered (engine.loraSites:
 // tensor name → { layer, site, d: [x, y], bt: [x, y] | null }). Returns the adapter handle setAdapter() takes.
 export async function loadLora(engine, source, { scale = 1 } = {}) {
   // a URL, a Blob (a File from OPFS or a picker), an ArrayBuffer or a Uint8Array
-  const bytes = source instanceof Uint8Array ? source : new Uint8Array(typeof source === 'string'
-    ? await (await fetch(source)).arrayBuffer() : source instanceof Blob ? await source.arrayBuffer() : source);
+  const bytes = source instanceof Uint8Array ? source : typeof source === 'string' ? await fetchBytes(source)
+    : new Uint8Array(source instanceof Blob ? await source.arrayBuffer() : source);
   const gguf = parseGguf(bytes), kv = gguf.kv;
   if (kv['adapter.type'] !== 'lora') throw new Error(`not a LoRA GGUF (adapter.type ${kv['adapter.type']})`);
   if (kv['general.architecture'] !== engine.arch) throw new Error(`adapter for ${kv['general.architecture']}, model is ${engine.arch}`);
@@ -95,14 +155,14 @@ export async function loadLora(engine, source, { scale = 1 } = {}) {
     if (engine.b && !io.bt) throw new Error(`${base}: no hook in this engine's chunked prefill`);
     const [N, r] = ta.dims, [r2, M] = tb.dims;
     if (r !== r2 || N !== w.cols || M !== w.rows) throw new Error(`${base}: adapter shape ${N}×${r} / ${r2}×${M} does not fit ${w.cols}×${w.rows}`);
-    for (const t of [ta, tb]) if (t.type !== GGML.F16) throw new Error(`${t.name}: type ${t.type}, LoRA tensors must be F16`);
+    for (const t of [ta, tb]) if (!(t.type in TO_F16)) throw new Error(`${t.name}: ggml type ${t.type}; LoRA tensors must be F16, F32 or BF16`);
     R = Math.max(R, r);
     pairs.push({ io, ta, tb, r, N, M });
   }
   if (!pairs.length) throw new Error('the adapter has no lora_a / lora_b pairs');
   const upload = (t) => {
     const n = t.dims.reduce((x, y) => x * y, 1), buf = engine.buffer(n * 2, STORAGE | COPY_DST, 'adapter');
-    engine.device.queue.writeBuffer(buf, 0, bytes, gguf.dataStart + t.offset, n * 2);
+    engine.device.queue.writeBuffer(buf, 0, TO_F16[t.type](bytes, gguf.dataStart + t.offset, n));
     onGpu += buf.size;
     return buf;
   };

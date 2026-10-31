@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+- Trained adapters to try on the site (`examples/lora/`, `/lora/`): pick LFM2.5 24B, Gemma 4 26B or Qwen3.6 35B, then
+  load one or more published LoRAs and switch between them and the plain model, or load your own by URL or file.
+  The adapters are their authors' files, fetched from their Hugging Face repositories at pinned revisions, with the
+  author and licence shown: LFM2.5 Pi and Claude Code (harness-hub, LFM 1.0); Gemma 4 Hermes tool-use reasoning,
+  function calling + thinking, Kimi K2 reasoning, Opus reasoning style (hotdogs, Apache-2.0); Qwen3.6 MicroTurn
+  duplex voice (codacus, Apache-2.0), which the page runs as a scripted call with its client's listen rule. The
+  adapter list shows before a model loads; rows stack on narrow screens; `?root=` picks the OPFS folder.
+- `engines/lora.js` reads F32 and BF16 adapter tensors as well as F16 (rounded to f16 once at load; the conversion
+  is bit-identical to numpy on 200,000 values) and resumes an adapter download with a Range request where the
+  connection drops (a 37 MB adapter failed with "Failed to fetch" on a slow link).
+- `scripts/record-refs.mjs --lora-request` takes several `id:scale` pairs, so one server records references for
+  several adapters.
+- Gates against `llama-server --lora` with the same adapter files (plain / adapter on / plain again, 9 prompts):
+  Gemma 4 Hermes (F32) 9/9, 9/9, 9/9 and Opus (BF16) 9/9, 9/9, 9/9 (Metal); Qwen3.6 MicroTurn 6/9, 8/9, 6/9 against
+  CPU llama.cpp (the plain misses are the WebGPU engine against the CPU reference; the adapter miss is at a point
+  where both references agree). Page checks, headless Chrome: Gemma 4 + Opus and LFM2.5 + Claude Code fetched from
+  Hugging Face, switch 0.1 ms or less, the second plain reply identical to the first; Qwen3.6 + MicroTurn on the
+  scripted call: the plain model never speaks (P(listen) 1.00 every tick), the adapter waits through the pauses and
+  answers once the question ends.
+
 ## 0.6.20 (2026-10-31)
 - Run-time LoRA in every native MoE engine. The kernels and loader move to `engines/lora.js`; `Qwen3MoeSsd` (so every
   engine) has `loadAdapter(source, { scale })` and `setAdapter(adapter | null)`. An engine registers each matmul an
