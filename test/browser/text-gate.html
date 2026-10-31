@@ -7,18 +7,17 @@
 // (examples/chat/refs/*.json, written by scripts/record-refs.mjs --raw) against llama.cpp's reply, character for character.
 //   node examples/run-demo.mjs test/browser/text-gate.html --models <dir> --file <gguf> --ref examples/chat/refs/<x>.json [--engine lfm2]
 // ?poolGB sets the expert pool (default 4). The store goes under OPFS diskformer-test/<file> and stays for the next run.
+// Run-time LoRA: --query "adapter=/models/<lora.gguf>&ref2=/examples/chat/refs/<y>.json" runs three phases on one
+// loaded engine: the plain model against ref, the adapter switched on against ref2, then switched off against ref again.
 import { Lfm2MoeSsd } from '../../engines/lfm2_moe_ssd.js';
 import { storeKey } from '../../src/ingest.js';
 const ENGINES = { lfm2: Lfm2MoeSsd };
 const q = new URLSearchParams(location.search);
 const url = q.get('url'), Engine = ENGINES[q.get('engine') || 'lfm2'];
 const log = (s) => { document.getElementById('out').textContent += `\n${s}`; window.progressText = s; };
-try {
-  const ref = await (await fetch(q.get('ref'), { cache: 'no-store' })).json();
-  const t0 = performance.now();
-  const m = await Engine.load(null, { url, key: storeKey(url.split('/').pop()), root: 'diskformer-test', poolBytes: Number(q.get('poolGB') || 4) * 2 ** 30, maxCtx: 512,
-    onProgress: (e) => { if (e.status === 'weights' && e.total) log(`load ${e.kind || 'ingest'} ${e.loaded} of ${e.total}`); } });
-  log(`loaded in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+const refs = async (u) => (await fetch(u, { cache: 'no-store' })).json();
+
+async function phase(m, name, ref) {
   const stops = new Set(m.stopTokenIds), rows = [];
   for (const c of ref.conversations) {
     const s0 = performance.now();
@@ -33,11 +32,32 @@ try {
     let at = 0; while (at < ours.length && at < theirs.length && ours[at] === theirs[at]) at++;
     const row = { name: c.name, identical: ours === theirs, sameUpTo: at, of: theirs.length, tokPerSec: +(out.length / ((performance.now() - s0) / 1000)).toFixed(1), ...(ours === theirs ? {} : { ours, theirs }) };
     rows.push(row);
-    log(`${row.identical ? 'OK  ' : 'DIFF'} ${c.name} ${row.identical ? '' : `first difference at char ${at} of ${theirs.length}`}`);
+    log(`${name}: ${row.identical ? 'OK  ' : 'DIFF'} ${c.name} ${row.identical ? '' : `first difference at char ${at} of ${theirs.length}`}`);
   }
   const identical = rows.filter((r) => r.identical).length;
-  window.result = { ok: identical === rows.length, identical, of: rows.length, about: ref.about, rows };
-  log(`${identical}/${rows.length} identical to the reference`);
+  log(`${name}: ${identical}/${rows.length} identical to the reference`);
+  return { phase: name, identical, of: rows.length, about: ref.about, rows };
+}
+
+try {
+  const ref = await refs(q.get('ref'));
+  const t0 = performance.now();
+  const m = await Engine.load(null, { url, key: storeKey(url.split('/').pop()), root: 'diskformer-test', poolBytes: Number(q.get('poolGB') || 4) * 2 ** 30, maxCtx: 512,
+    onProgress: (e) => { if (e.status === 'weights' && e.total) log(`load ${e.kind || 'ingest'} ${e.loaded} of ${e.total}`); } });
+  log(`loaded in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+  const phases = [await phase(m, 'plain', ref)];
+  let adapter = null;
+  if (q.get('adapter')) {
+    const t1 = performance.now();
+    adapter = await m.loadAdapter(q.get('adapter'));
+    log(`adapter ${adapter.name}: rank ${adapter.rank}, scale ${adapter.scale}, ${adapter.matrices} matrices, ${(adapter.bytes / 1e6).toFixed(1)} MB on the GPU, in ${((performance.now() - t1) / 1000).toFixed(1)} s`);
+    await m.setAdapter(adapter);
+    phases.push(await phase(m, 'adapter', await refs(q.get('ref2'))));
+    await m.setAdapter(null);
+    phases.push(await phase(m, 'plain again', ref));
+  }
+  const identical = phases.reduce((x, p) => x + p.identical, 0), of = phases.reduce((x, p) => x + p.of, 0);
+  window.result = { ok: identical === of, identical, of, adapter: adapter && { name: adapter.name, rank: adapter.rank, scale: adapter.scale, matrices: adapter.matrices, bytes: adapter.bytes }, phases };
   await m.dispose();
 } catch (e) { window.result = { ok: false, error: `${e.code || e.name}: ${e.message}`, stack: e.stack }; log(window.result.error); }
 </script>

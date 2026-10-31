@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+- Run-time LoRA in the native LFM2.5 engine: `await engine.loadAdapter(url | Blob | bytes, { scale })` reads a LoRA
+  GGUF (llama.cpp's format: `W.lora_a` / `W.lora_b`, F16) onto the GPU, and `await engine.setAdapter(adapter | null)`
+  switches it on or off between turns, with no reload and one base download for every adapter. Each adapted matmul
+  is followed by y += scale · B(A·x) (new kernels `loraA` / `loraB`, batched `loraAT` / `loraBT`), scale = alpha / rank
+  as llama.cpp's `--lora`. Adapters on the routed experts are refused. harness-hub's Pi adapter: 106 matrices,
+  37.4 MB on the GPU, loaded in 0.2 s.
+- Gate (`test/browser/text-gate.html --query adapter=…&ref2=…`, one engine, Chrome, 4 GiB pool, greedy, 64 tokens):
+  plain 8/9 against llama.cpp; adapter on 9/9 against `llama-server --lora` (the merged Q8_0-dense file gave 8/9);
+  adapter off again 8/9, the same text as before it was switched on. Decode speed was the same in all three phases
+  in this run (8.2, 8.4, 8.3 tok/s median, with full logits read back each token; not a benchmark).
+
 ## 0.6.18 (2026-10-31)
 - Reasoning off now holds for templates that always open a thought block. LFM2.5-24B-A2B's template ends the
   generation prompt with `<think>` and ignores `enable_thinking`, so `llama.chat(messages, { thinking: false })` still
