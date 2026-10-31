@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.20 (2026-10-31)
 - Run-time LoRA in every native MoE engine. The kernels and loader move to `engines/lora.js`; `Qwen3MoeSsd` (so every
   engine) has `loadAdapter(source, { scale })` and `setAdapter(adapter | null)`. An engine registers each matmul an
   adapter may follow with `loraIo(tensor, layer, site, x, y)` (and `loraIoB` for its chunked prefill), and adds an

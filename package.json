@@ -1,6 +1,6 @@
 {
   "name": "diskformer",
-  "version": "0.6.19",
+  "version": "0.6.20",
   "description": "Run a model larger than your GPU memory in a browser tab: weights stay in OPFS, WebGPU holds only what each step needs. llama.cpp with paged MoE experts (diskformer/llama), a disk tier, and hand-written MoE engines.",
   "type": "module",
   "license": "MIT",
