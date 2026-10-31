@@ -1,5 +1,5 @@
 // Assembles the demo as a static site: the llama.cpp page (ggml/chat.html) at the root, the hand-written engines' page
-// (examples/chat) under classic/. A static HF Space serves its app file's folder as the site root, and
+// (examples/chat) under classic/, the run-time LoRA switch (examples/lora) under lora/. A static HF Space serves its app file's folder as the site root, and
 // diskformer.naklitechie.com serves the same tree.
 //   node scripts/build-space.mjs <out-dir> [--space]   --space adds the Space's README (HF metadata)
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -26,6 +26,13 @@ const classic = (await readFile(join(here, 'examples/chat/index.html'), 'utf8'))
 await writeFile(join(out, 'classic/index.html'), noParent('examples/chat/index.html', classic));
 await cp(join(here, 'examples/chat/refs'), join(out, 'classic/refs'), { recursive: true });
 for (const d of ['src', 'engines']) await cp(join(here, d), join(out, 'classic', d), { recursive: true });
+
+// lora/: the run-time LoRA switch (examples/lora), on the engines copied into classic/.
+const lora = (await readFile(join(here, 'examples/lora/index.html'), 'utf8')).split("from '../../engines/").join("from '../classic/engines/");
+await mkdir(join(out, 'lora'), { recursive: true });
+// lora/ sits one level below the site root, so ../classic/ stays in the tree and only ../../ leaves it
+if (/['"]\.\.\/\.\.\//.test(lora)) { console.error('examples/lora/index.html still has a ../../ path the site cannot serve'); process.exit(1); }
+await writeFile(join(out, 'lora/index.html'), lora);
 
 if (space) await cp(join(here, 'examples/chat/space-README.md'), join(out, 'README.md'));
 await cp(join(here, 'LICENSE'), join(out, 'LICENSE'));

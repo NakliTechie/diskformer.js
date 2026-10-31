@@ -11,6 +11,7 @@ on:
       - src/**
       - engines/**
       - examples/chat/**
+      - examples/lora/**
       - ggml/chat.html
       - ggml/worker.mjs
       - ggml/dist/**

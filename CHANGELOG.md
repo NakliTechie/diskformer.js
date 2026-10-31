@@ -11,6 +11,9 @@
   plain 8/9 against llama.cpp; adapter on 9/9 against `llama-server --lora` (the merged Q8_0-dense file gave 8/9);
   adapter off again 8/9, the same text as before it was switched on. Decode speed was the same in all three phases
   in this run (8.2, 8.4, 8.3 tok/s median, with full logits read back each token; not a benchmark).
+- Demo page `examples/lora/` (site: `/lora/`): LFM2.5-24B-A2B with harness-hub's Pi adapter, a Plain / Pi switch and
+  "Ask both, side by side". Headless check (`?auto=1`): switch 0.2 ms; plain, Pi, plain again give 256 tokens each at
+  11.2, 10.9 and 11.5 tok/s; the second plain reply is identical to the first. `scripts/build-space.mjs` adds it.
 
 ## 0.6.18 (2026-10-31)
 - Reasoning off now holds for templates that always open a thought block. LFM2.5-24B-A2B's template ends the

@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>diskformer LoRA switch</title>
+<meta name="description" content="LFM2.5-24B-A2B (13.6 GB) in a browser tab, with harness-hub's Pi coding-agent LoRA switched on and off at run time: no reload, no second download.">
+<style>
+  :root { --bg: #fafaf9; --fg: #1c1917; --muted: #78716c; --line: #e7e5e4; --card: #fff; --accent: #2563eb; --pi: #7c3aed; --bad: #b91c1c; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 14px 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+  textarea, button { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; }
+  textarea { width: 100%; resize: vertical; min-height: 64px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; background: var(--card); padding: 7px 14px; }
+  .seg button[aria-pressed=true] { background: var(--fg); color: var(--bg); }
+  .seg button.pi[aria-pressed=true] { background: var(--pi); }
+  .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 10px 0 6px; }
+  .bar span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  #status.bad { color: var(--bad); }
+  .meter { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .meter div { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .meter b { display: block; font-size: 20px; }
+  .meter span { font-size: 12px; color: var(--muted); }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .reply { border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; background: var(--card); }
+  .reply h3 { font-size: 13px; margin: 0 0 6px; color: var(--muted); font-weight: 600; }
+  .reply.pi h3 { color: var(--pi); }
+  .reply .think { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); font-size: 13px; border-left: 2px solid var(--line); padding-left: 8px; margin-bottom: 8px; }
+  .reply .answer { white-space: pre-wrap; overflow-wrap: anywhere; }
+  footer { font-size: 12px; color: var(--muted); margin-top: 24px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>One model, two behaviours: a LoRA switched at run time</h1>
+  <p>LiquidAI's LFM2.5-24B-A2B (13.6 GB) answers in this tab, with its 64 experts per layer read from disk as each
+    token needs them. harness-hub's Pi adapter (rank 32, 37 MB) was trained for a coding agent. Here it sits on the GPU
+    beside the model and is switched on or off between replies: no reload, no second download of the model.</p>
+  <p class="muted">Chromium with WebGPU and about 6 GB of free GPU memory. Nothing leaves this tab except the two
+    downloads from Hugging Face.</p>
+
+  <section class="card">
+    <div class="row">
+      <button id="load" class="primary">Download and load</button>
+      <span class="muted">13.6 GB once into this browser's storage, then the 37 MB adapter.</span>
+    </div>
+    <div class="bar"><span id="fill"></span></div>
+    <p id="status" class="muted">Not loaded.</p>
+  </section>
+
+  <section class="card" id="meterCard" hidden>
+    <div class="meter">
+      <div><b id="mAdapter">–</b><span>adapter on the GPU</span></div>
+      <div><b id="mSwitch">–</b><span>last switch</span></div>
+      <div><b id="mSpeed">–</b><span>decode speed, last reply</span></div>
+    </div>
+  </section>
+
+  <section class="card" id="askCard" hidden>
+    <div class="row" style="margin-bottom:10px">
+      <div class="seg" role="group" aria-label="Adapter">
+        <button id="mPlain" aria-pressed="true">Plain model</button>
+        <button id="mPi" class="pi" aria-pressed="false">Pi adapter</button>
+      </div>
+      <span class="muted">The switch applies to the next reply.</span>
+    </div>
+    <textarea id="q">Write a bash one-liner that counts the lines in every .py file under src/, then explain it in one sentence.</textarea>
+    <div class="row" style="margin-top:10px">
+      <button id="ask" class="primary">Ask</button>
+      <button id="both">Ask both, side by side</button>
+      <button id="stop" disabled>Stop</button>
+    </div>
+  </section>
+
+  <section class="cols" id="out"></section>
+
+  <footer>Greedy decoding, so the same question gets the same answer. The engine applies y += scale · B(A·x) after
+    each of the 106 adapted matrices; with the adapter on, its replies match llama.cpp's <code>llama-server --lora</code>
+    in 9 of 9 gate prompts. Engines: <a href="https://github.com/NakliTechie/diskformer.js">diskformer.js</a>.
+    Model and adapter: LFM Open License v1.0 (Liquid AI; adapter by harness-hub).</footer>
+</main>
+
+<script type="module">
+import { Lfm2MoeSsd } from '../../engines/lfm2_moe_ssd.js';
+
+// ?url=<GGUF> and ?adapter=<LoRA GGUF>: local copies, honoured only on this machine. ?auto=1 loads and asks both ways
+// (window.result), for a headless check.
+const ADAPTER = 'https://huggingface.co/harness-hub/LFM2.5-24B-A2B-pi-GGUF/resolve/a994cf7f03ab0e572832d5829f42cbe2ef28d472/LFM2.5-24B-A2B-harbor-pi-lora-F16.gguf';
+const q = new URLSearchParams(location.search), local = ['localhost', '127.0.0.1'].includes(location.hostname);
+const $ = (id) => document.getElementById(id);
+const GB = (n) => (n / 1e9).toFixed(2) + ' GB';
+let engine = null, pi = null, mode = 'plain', busy = false, ctrl = null;
+
+const status = (text, bad = false) => { $('status').textContent = text; $('status').className = bad ? 'bad' : 'muted'; window.progressText = text; };
+const controls = () => {
+  $('load').disabled = busy || !!engine;
+  for (const id of ['ask', 'both', 'mPlain', 'mPi']) $(id).disabled = busy || !engine;
+  $('stop').disabled = !busy || !engine;
+};
+if (!navigator.gpu) status('This page needs WebGPU: Chrome or Edge 121 or later, on a GPU with shader-f16.', true);
+
+async function load() {
+  busy = true; controls();
+  const t0 = performance.now();
+  try {
+    engine = await Lfm2MoeSsd.load(null, {
+      url: (local && q.get('url')) || undefined, root: 'diskformer', poolBytes: 4 * 2 ** 30, maxCtx: 2048,
+      onProgress: (e) => {
+        if (e.status === 'weights' && e.kind === 'tensors') { $('fill').style.width = `${100 * e.loaded / e.total}%`; status(`Loading the dense layers onto the GPU: ${e.loaded} of ${e.total}`); }
+        else if (e.status === 'weights' && e.total) { $('fill').style.width = `${100 * e.loaded / e.total}%`; status(`Downloading into this browser's storage (once): ${GB(e.loaded)} of ${GB(e.total)}`); }
+      },
+    });
+    status('Loading the Pi adapter');
+    pi = await engine.loadAdapter((local && q.get('adapter')) || ADAPTER);
+    $('fill').style.width = '100%';
+    $('mAdapter').textContent = `${(pi.bytes / 1e6).toFixed(1)} MB`;
+    $('meterCard').hidden = false; $('askCard').hidden = false;
+    status(`Loaded in ${((performance.now() - t0) / 1000).toFixed(1)} s. Pi adapter: rank ${pi.rank}, ${pi.matrices} matrices.`);
+  } catch (e) { status(`Could not load: ${e.message}`, true); throw e; }
+  finally { busy = false; controls(); }
+}
+
+async function setMode(m) {
+  const t0 = performance.now();
+  await engine.setAdapter(m === 'pi' ? pi : null);
+  mode = m;
+  $('mPlain').setAttribute('aria-pressed', m === 'plain'); $('mPi').setAttribute('aria-pressed', m === 'pi');
+  $('mSwitch').textContent = `${(performance.now() - t0).toFixed(1)} ms`;
+}
+
+// One reply in the current mode, streamed into a column: the reasoning (LFM2.5 always reasons first) muted, the answer below.
+async function ask(text) {
+  const box = document.createElement('div'); box.className = `reply ${mode}`;
+  box.innerHTML = '<h3></h3><div class="think"></div><div class="answer"></div>';
+  box.querySelector('h3').textContent = mode === 'pi' ? 'Pi adapter' : 'Plain model';
+  $('out').append(box);
+  const show = (t) => {
+    const at = t.indexOf('</think>');
+    box.querySelector('.think').textContent = (at < 0 ? t : t.slice(0, at)).trim();
+    box.querySelector('.answer').textContent = at < 0 ? '' : t.slice(at + 8).trim();
+  };
+  const t0 = performance.now();
+  let tFirst = 0, tokens = 0, out = '';
+  for await (const r of engine.generate([{ role: 'user', content: text }], { maxNewTokens: Number(q.get('n') || 512), signal: ctrl.signal })) {
+    if (!tokens) tFirst = performance.now();
+    out = r.text; tokens = r.tokens; show(out);
+  }
+  const tps = tokens > 1 ? (tokens - 1) / ((performance.now() - tFirst) / 1000) : 0;
+  if (tps) $('mSpeed').textContent = `${tps.toFixed(1)} tok/s`;
+  return { mode, text: out, tokens, firstTokenMs: Math.round(tFirst - t0), tokPerSec: +tps.toFixed(2) };
+}
+
+async function run(modes) {
+  const text = $('q').value.trim();
+  if (!text || busy) return null;
+  busy = true; ctrl = new AbortController(); controls();
+  $('out').replaceChildren();
+  const rows = [];
+  try { for (const m of modes) { if (m !== mode) await setMode(m); rows.push(await ask(text)); } }
+  catch (e) { status(`Error: ${e.message}`, true); }
+  finally { busy = false; ctrl = null; controls(); }
+  return rows;
+}
+
+$('load').onclick = () => load().catch(() => {});
+$('mPlain').onclick = () => setMode('plain');
+$('mPi').onclick = () => setMode('pi');
+$('ask').onclick = () => run([mode]);
+$('both').onclick = () => run(['plain', 'pi']);
+$('stop').onclick = () => { if (ctrl) ctrl.abort(); };
+controls();
+window.demo = { load, setMode, run, get engine() { return engine; } };
+if (q.get('auto')) {
+  load().then(() => run(['plain', 'pi', 'plain'])).then((rows) => {
+    window.result = { ok: !!rows && rows.length === 3 && rows.every((r) => r.tokens > 0) && rows[0].text === rows[2].text, switchMs: $('mSwitch').textContent, adapter: { rank: pi.rank, matrices: pi.matrices, bytes: pi.bytes }, rows };
+  }).catch((e) => { window.result = { ok: false, error: e.message }; });
+}
+</script>
+</body>
+</html>
