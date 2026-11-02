@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.21 — 2026-11-02
+## 0.6.21 (2026-11-02)
 - Trained adapters to try on the site (`examples/lora/`, `/lora/`): pick LFM2.5 24B, Gemma 4 26B or Qwen3.6 35B, then
   load one or more published LoRAs and switch between them and the plain model, or load your own by URL or file.
   The adapters are their authors' files, fetched from their Hugging Face repositories at pinned revisions, with the
